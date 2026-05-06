@@ -511,6 +511,7 @@ export default function CheckoutPage() {
                     {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode}</p>}
                   </div>
                 </div>
+                </div>{/* end grid city/pincode */}
                 <Field label="Delivery Notes (optional)" placeholder="Gate code, landmark, special instructions..." value={form.notes} onChange={(v) => setField('notes', v)} textarea />
               </div>
               )}

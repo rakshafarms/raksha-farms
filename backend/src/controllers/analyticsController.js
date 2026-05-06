@@ -25,7 +25,7 @@ export async function getDashboardStats(req, res) {
         FROM orders o
         CROSS JOIN LATERAL jsonb_array_elements(o.items) AS item
         JOIN products p ON p.id = (item->>'id')::uuid
-        WHERE o.status = 'delivered'
+        WHERE o.status NOT IN ('cancelled','rejected')
         GROUP BY p.id ORDER BY units_sold DESC LIMIT 5
       `),
       query(`
@@ -84,7 +84,7 @@ export async function getCategoryRevenue(req, res) {
       FROM orders o
       CROSS JOIN LATERAL jsonb_array_elements(o.items) AS item
       JOIN products p ON p.id = (item->>'id')::uuid
-      WHERE o.status = 'delivered'
+      WHERE o.status NOT IN ('cancelled','rejected')
       GROUP BY p.category ORDER BY revenue DESC
     `)
     res.json(rows)
