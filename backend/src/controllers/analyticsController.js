@@ -2,11 +2,47 @@ import { query } from '../config/database.js'
 
 export async function getDashboardStats(req, res) {
   try {
-    const [orders, revenue, users, pending, daily, topProducts, statusBreakdown, paymentMethods] = await Promise.all([
-      query(`SELECT COUNT(*) as total FROM orders`),
-      query(`SELECT COALESCE(SUM(total),0) as total FROM orders WHERE status='delivered'`),
-      query(`SELECT COUNT(*) as total FROM users WHERE role='user'`),
-      query(`SELECT COUNT(*) as total FROM orders WHERE status IN ('placed','accepted','preparing','out_for_delivery')`),
+    const [
+      todayOrders, todayRevenue, todayUsers, pendingOrders,
+      yesterdayOrders, yesterdayRevenue, yesterdayUsers,
+      daily, topProducts, recentOrders, statusBreakdown
+    ] = await Promise.all([
+
+      // TODAY's orders (all non-cancelled)
+      query(`SELECT COUNT(*) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // TODAY's revenue (all non-cancelled orders)
+      query(`SELECT COALESCE(SUM(total),0) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // TODAY's unique customers who placed an order
+      query(`SELECT COUNT(DISTINCT user_id) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // LIVE pending orders (all time - this is a live work queue)
+      query(`SELECT COUNT(*) AS total FROM orders
+             WHERE status IN ('placed','accepted','preparing','out_for_delivery')`),
+
+      // YESTERDAY orders for delta
+      query(`SELECT COUNT(*) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // YESTERDAY revenue for delta
+      query(`SELECT COALESCE(SUM(total),0) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // YESTERDAY unique customers for delta
+      query(`SELECT COUNT(DISTINCT user_id) AS total FROM orders
+             WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
+               AND status NOT IN ('cancelled','rejected')`),
+
+      // Last 7 days daily breakdown
       query(`
         SELECT
           TO_CHAR(d.date, 'Mon DD') AS label,
@@ -15,9 +51,13 @@ export async function getDashboardStats(req, res) {
         FROM generate_series(
           CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day'
         ) AS d(date)
-        LEFT JOIN orders o ON DATE(o.created_at) = d.date AND o.status NOT IN ('cancelled','rejected')
+        LEFT JOIN orders o
+          ON DATE(o.created_at AT TIME ZONE 'Asia/Kolkata') = d.date
+         AND o.status NOT IN ('cancelled','rejected')
         GROUP BY d.date ORDER BY d.date ASC
       `),
+
+      // Top 5 products
       query(`
         SELECT p.name, p.image_url, p.category,
                COUNT(DISTINCT o.id) AS order_count,
@@ -28,29 +68,47 @@ export async function getDashboardStats(req, res) {
         WHERE o.status NOT IN ('cancelled','rejected')
         GROUP BY p.id ORDER BY units_sold DESC LIMIT 5
       `),
+
+      // Recent 8 orders
+      query(`
+        SELECT o.id, o.total, o.status, o.payment_method,
+               o.created_at,
+               u.name AS customer_name,
+               u.email AS customer_email
+        FROM orders o
+        JOIN users u ON u.id = o.user_id
+        ORDER BY o.created_at DESC LIMIT 8
+      `),
+
+      // Status breakdown
       query(`
         SELECT status, COUNT(*) as count
         FROM orders GROUP BY status ORDER BY count DESC
       `),
-      query(`
-        SELECT payment_method, COUNT(*) as count,
-               COALESCE(SUM(total),0) as revenue
-        FROM orders WHERE status NOT IN ('cancelled','rejected')
-        GROUP BY payment_method
-      `),
     ])
+
+    const pct = (today, yest) => {
+      const t = Number(today), y = Number(yest)
+      if (y === 0 && t === 0) return null
+      if (y === 0) return 100
+      return Math.round(((t - y) / y) * 100)
+    }
 
     res.json({
       kpis: {
-        totalOrders:   parseInt(orders.rows[0].total),
-        totalRevenue:  parseFloat(revenue.rows[0].total),
-        activeUsers:   parseInt(users.rows[0].total),
-        pendingOrders: parseInt(pending.rows[0].total),
+        todayOrders:   parseInt(todayOrders.rows[0].total),
+        todayRevenue:  parseFloat(todayRevenue.rows[0].total),
+        todayCustomers: parseInt(todayUsers.rows[0].total),
+        pendingOrders: parseInt(pendingOrders.rows[0].total),
+        // Deltas vs yesterday
+        ordersChange:   pct(todayOrders.rows[0].total, yesterdayOrders.rows[0].total),
+        revenueChange:  pct(todayRevenue.rows[0].total, yesterdayRevenue.rows[0].total),
+        customersChange: pct(todayUsers.rows[0].total, yesterdayUsers.rows[0].total),
       },
       dailySales:      daily.rows,
       topProducts:     topProducts.rows,
+      recentOrders:    recentOrders.rows,
       statusBreakdown: statusBreakdown.rows,
-      paymentMethods:  paymentMethods.rows,
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
