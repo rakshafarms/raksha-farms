@@ -168,10 +168,16 @@ export default function Navbar() {
                       onClick={() => setUserMenuOpen((v) => !v)}
                       className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-xl hover:bg-sage-50 transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-forest-400 to-forest-600 flex items-center justify-center text-white font-bold text-sm overflow-hidden flex-shrink-0">
-                        {user?.avatar
-                          ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                          : user?.name?.[0]?.toUpperCase()}
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-forest-400 to-forest-600 flex items-center justify-center text-white font-bold text-sm overflow-hidden flex-shrink-0 relative">
+                        {user?.name?.[0]?.toUpperCase()}
+                        {user?.avatar && (
+                          <img
+                            src={user.avatar}
+                            alt={user.name}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.style.display = 'none' }}
+                          />
+                        )}
                       </div>
                       <span className="hidden sm:block text-sm font-semibold text-gray-700 min-w-[80px] max-w-[120px] truncate">
                         {user?.name?.split(' ')[0]}

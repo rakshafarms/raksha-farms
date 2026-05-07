@@ -130,10 +130,16 @@ export default function MyOrdersPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-white font-black text-xl flex-shrink-0 shadow-sm overflow-hidden">
-            {user?.avatar
-              ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-              : user?.name?.[0]?.toUpperCase() || '?'}
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-white font-black text-xl flex-shrink-0 shadow-sm overflow-hidden relative">
+            {user?.name?.[0]?.toUpperCase() || '?'}
+            {user?.avatar && (
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            )}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">My Orders</h1>

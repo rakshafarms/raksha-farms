@@ -15,6 +15,11 @@ const STEPS = [
   { id: 3, label: 'Payment'   },
 ]
 
+// Regex constants at module scope to avoid esbuild JSX parsing issues
+const PHONE_RE   = /^[6-9]\d{9}$/
+const PINCODE_RE = /^\d{6}$/
+const DIGIT_RE   = /\D/g
+
 export default function CheckoutPage() {
   const { cart, totalPrice, clearCart, closeDrawer } = useCart()
   const { addOrder }    = useOrders()
@@ -24,6 +29,7 @@ export default function CheckoutPage() {
   const navigate        = useNavigate()
   const { addresses, addAddress, deleteAddress, LABEL_ICONS } = useAddresses()
   const { plans: subscriptionPlans } = useSubscriptions()
+  const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
   const [step, setStep]   = useState(1)
   const [orderType, setOrderType] = useState('onetime') // 'onetime' or 'subscription'
@@ -79,10 +85,20 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('upi')
 
   // Coupon state
-  const [couponCode, setCouponCode]       = useState('')
-  const [couponApplied, setCouponApplied] = useState(null)  // { discount, code, coupon }
-  const [couponError, setCouponError]     = useState('')
-  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponCode, setCouponCode]             = useState('')
+  const [couponApplied, setCouponApplied]       = useState(null)  // { discount, code, coupon }
+  const [couponError, setCouponError]           = useState('')
+  const [couponLoading, setCouponLoading]       = useState(false)
+  const [availableCoupons, setAvailableCoupons] = useState([])
+  const [showOffers, setShowOffers]             = useState(false)
+
+  // Load available coupons once
+  useEffect(() => {
+    fetch(BACKEND_URL + '/api/coupons/available')
+      .then(r => r.json())
+      .then(data => setAvailableCoupons(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => { closeDrawer() }, [])
 
@@ -95,22 +111,31 @@ export default function CheckoutPage() {
   const couponDiscount = couponApplied ? couponApplied.discount : 0
   const finalTotal    = Math.max(0, totalPrice - subscriptionDiscount - couponDiscount + slotFee)
 
-  async function applyCoupon() {
-    if (!couponCode.trim()) return
+  async function validateAndApplyCoupon(code) {
+    const trimmed = (code || '').trim().toUpperCase()
+    if (!trimmed) return
     setCouponLoading(true); setCouponError('')
     try {
-      const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-      const res = await fetch(`${BACKEND_URL}/api/coupons/validate`, {
+      const res = await fetch(BACKEND_URL + '/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: couponCode.trim(), order_total: totalPrice }),
+        body: JSON.stringify({ code: trimmed, order_total: totalPrice, user_id: user?.id || null }),
       })
       const data = await res.json()
       if (!res.ok) { setCouponError(data.error || 'Invalid coupon'); return }
-      setCouponApplied({ discount: data.discount, code: couponCode.trim().toUpperCase(), coupon: data.coupon })
-      addToast(`Coupon applied! You save ₹${data.discount}`, 'success')
+      setCouponApplied({ discount: data.discount, code: trimmed, coupon: data.coupon })
+      addToast('Coupon applied! You save ₹' + data.discount, 'success')
     } catch { setCouponError('Could not validate coupon') }
     finally { setCouponLoading(false) }
+  }
+
+  function applyCoupon() { validateAndApplyCoupon(couponCode) }
+
+  function applyOfferCoupon(code) {
+    setCouponCode(code)
+    setCouponError('')
+    setShowOffers(false)
+    validateAndApplyCoupon(code)
   }
 
   if (cart.length === 0) {
@@ -132,6 +157,10 @@ export default function CheckoutPage() {
     if (errors[key]) setErrors((e) => { const n = {...e}; delete n[key]; return n })
   }
 
+  function setPincode(val) {
+    setField('pincode', val.replace(DIGIT_RE, '').slice(0, 6))
+  }
+
   function fillFromAddress(addr) {
     setForm(f => ({
       ...f,
@@ -149,10 +178,10 @@ export default function CheckoutPage() {
   function validateStep1() {
     const errs = {}
     if (!form.name.trim())                          errs.name    = 'Full name is required'
-    if (!/^[6-9]\d{9}$/.test(form.phone.trim()))   errs.phone   = 'Enter valid 10-digit Indian mobile number'
+    if (!PHONE_RE.test(form.phone.trim()))          errs.phone   = 'Enter valid 10-digit Indian mobile number'
     if (!form.address.trim())                       errs.address = 'Delivery address is required'
     if (!form.city.trim())                          errs.city    = 'City is required'
-    if (!/^\d{6}$/.test(form.pincode.trim()))       errs.pincode = 'Enter valid 6-digit pincode'
+    if (!PINCODE_RE.test(form.pincode.trim()))      errs.pincode = 'Enter valid 6-digit pincode'
     return errs
   }
 
@@ -224,7 +253,6 @@ export default function CheckoutPage() {
     // Save to backend database (so admin can see it and status can be polled)
     let backendId = null
     try {
-      const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
       const headers = { 'Content-Type': 'application/json' }
       const token = localStorage.getItem('auth_token')
       if (token) headers['Authorization'] = `Bearer ${token}`
@@ -256,15 +284,24 @@ export default function CheckoutPage() {
       return
     }
 
-    // Save the used address to DB so it shows up next time (cache-proof)
-    addAddress({
-      label:   'Home',
-      name:    form.name.trim(),
-      phone:   form.phone.trim(),
-      address: form.address.trim(),
-      city:    form.city.trim(),
-      pincode: form.pincode.trim(),
-    }).catch(() => {})
+    // Save the used address only if it doesn't already exist (prevent duplicates)
+    const normalize = (s) => (s || '').trim().toLowerCase()
+    const alreadySaved = addresses.some(a =>
+      normalize(a.address) === normalize(form.address) &&
+      normalize(a.city)    === normalize(form.city)    &&
+      normalize(a.pincode) === normalize(form.pincode) &&
+      normalize(a.name)    === normalize(form.name)
+    )
+    if (!alreadySaved) {
+      addAddress({
+        label:   'Home',
+        name:    form.name.trim(),
+        phone:   form.phone.trim(),
+        address: form.address.trim(),
+        city:    form.city.trim(),
+        pincode: form.pincode.trim(),
+      }).catch(() => {})
+    }
 
     addOrder({ ...order, backendId })
     // Stock already deducted server-side in transaction; sync local context so UI reflects it
@@ -495,34 +532,18 @@ export default function CheckoutPage() {
                 <Field label="Delivery Address" placeholder="House no., Street, Locality" value={form.address} onChange={(v) => setField('address', v)} error={errors.address} required textarea />
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="City" placeholder="e.g. Hyderabad" value={form.city} onChange={(v) => setField('city', v)} error={errors.city} required />
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Pincode <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="6-digit pincode"
-                        value={form.pincode}
-                        onChange={(e) => setField('pincode', e.target.value.replace(/\D/g, ''))}
-                        className={`input-field ${errors.pincode ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
-                      />
-                    {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode}</p>}
-                  </div>
+                  <Field label="Pincode" placeholder="6-digit pincode" value={form.pincode} onChange={setPincode} error={errors.pincode} required />
                 </div>
-                </div>{/* end grid city/pincode */}
                 <Field label="Delivery Notes (optional)" placeholder="Gate code, landmark, special instructions..." value={form.notes} onChange={(v) => setField('notes', v)} textarea />
               </div>
               )}
               <button onClick={handleNext} className="btn-primary w-full mt-6 flex items-center justify-center gap-2">
                 Choose Delivery Slot
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </button>
             </div>
-          </div>
           )}
 
           {/* ── STEP 2: Delivery Scheduling ── */}
@@ -717,24 +738,72 @@ export default function CheckoutPage() {
                 </div>
               ))}
             </div>
-            {/* Coupon input */}
+            {/* Coupon section */}
             <div className="border-t pt-3 mb-2">
               {couponApplied ? (
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-sm">
-                  <span className="text-green-700 font-semibold">🎟 {couponApplied.code} — ₹{couponApplied.discount} off{couponApplied.coupon?.type === 'percent' ? ` (${couponApplied.coupon.value}%)` : ''}</span>
-                  <button onClick={() => { setCouponApplied(null); setCouponCode('') }} className="text-gray-400 hover:text-red-500 text-xs ml-2">✕</button>
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <div>
+                    <p className="text-green-700 font-bold text-sm">🎟 {couponApplied.code}</p>
+                    <p className="text-green-600 text-xs">−₹{couponApplied.discount} saved{couponApplied.coupon?.type === 'percent' ? ` (${couponApplied.coupon.value}%)` : ''}</p>
+                  </div>
+                  <button onClick={() => { setCouponApplied(null); setCouponCode('') }} className="text-gray-400 hover:text-red-500 text-xs ml-2 p-1">✕</button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <input value={couponCode} onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError('') }}
-                    placeholder="Coupon code" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-forest-400 uppercase"/>
-                  <button onClick={applyCoupon} disabled={couponLoading || !couponCode.trim()}
-                    className="px-3 py-2 bg-forest-500 text-white rounded-xl text-xs font-semibold disabled:opacity-50 hover:bg-forest-600 transition">
-                    {couponLoading ? '…' : 'Apply'}
-                  </button>
-                </div>
+                <>
+                  <div className="flex gap-2">
+                    <input value={couponCode} onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError('') }}
+                      onKeyDown={e => e.key === 'Enter' && applyCoupon()}
+                      placeholder="Enter coupon code"
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-forest-400 uppercase font-mono"/>
+                    <button onClick={applyCoupon} disabled={couponLoading || !couponCode.trim()}
+                      className="px-3 py-2 bg-forest-500 text-white rounded-xl text-xs font-semibold disabled:opacity-50 hover:bg-forest-600 transition-colors">
+                      {couponLoading ? '…' : 'Apply'}
+                    </button>
+                  </div>
+                  {couponError && <p className="text-red-500 text-xs mt-1.5">{couponError}</p>}
+
+                  {/* Available offers */}
+                  {availableCoupons.length > 0 && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowOffers(v => !v)}
+                        className="flex items-center gap-1 text-forest-600 text-xs font-semibold hover:text-forest-700 transition-colors"
+                      >
+                        🏷 {availableCoupons.length} offer{availableCoupons.length > 1 ? 's' : ''} available
+                        <svg className={`w-3 h-3 transition-transform ${showOffers ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7"/>
+                        </svg>
+                      </button>
+                      {showOffers && (
+                        <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                          {availableCoupons.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => applyOfferCoupon(c.code)}
+                              className="w-full flex items-center gap-2 p-2.5 bg-gray-50 hover:bg-forest-50 hover:border-forest-200 border border-gray-100 rounded-xl transition-colors text-left"
+                            >
+                              <span className="text-base">🎟</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-forest-600 font-mono">{c.code}</p>
+                                <p className="text-[10px] text-gray-500 truncate">
+                                  {c.type === 'percent'
+                                    ? (c.value + '% off' + (c.max_discount ? ' (max ₹' + c.max_discount + ')' : ''))
+                                    : ('₹' + c.value + ' off')}
+                                  {c.min_order > 0 ? (' · Min ₹' + c.min_order) : ''}
+                                </p>
+                                {c.description && <p className="text-[10px] text-gray-400 truncate">{c.description}</p>}
+                              </div>
+                              <span className="text-[10px] text-forest-600 font-semibold whitespace-nowrap">Tap to apply →</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
-              {couponError && <p className="text-red-500 text-xs mt-1">{couponError}</p>}
             </div>
             <div className="border-t pt-2 space-y-1.5 text-sm">
               <div className="flex justify-between text-gray-500">

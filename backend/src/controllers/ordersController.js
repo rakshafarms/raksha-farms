@@ -158,9 +158,11 @@ export async function createOrder(req, res) {
       const coupon = cRows[0]
       if (coupon && serverSubtotal >= Number(coupon.min_order || 0)) {
         const raw = coupon.type === 'percent'
-          ? (serverSubtotal * coupon.value / 100)
+          ? (serverSubtotal * Number(coupon.value) / 100)
           : Number(coupon.value)
-        couponDiscount = Math.min(Math.round(raw), serverSubtotal)
+        // Respect max_discount cap for percentage coupons
+        const capped = coupon.max_discount ? Math.min(raw, Number(coupon.max_discount)) : raw
+        couponDiscount = Math.min(Math.round(capped), serverSubtotal)
       }
       // used_count only incremented after discount is confirmed valid (below, after order insert)
     }

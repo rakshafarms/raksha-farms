@@ -65,13 +65,20 @@ export async function initDb() {
         type            VARCHAR(10) DEFAULT 'percent' CHECK (type IN ('percent','flat')),
         value           DECIMAL(10,2) NOT NULL,
         min_order       DECIMAL(10,2) DEFAULT 0,
+        max_discount    DECIMAL(10,2),
         max_uses        INTEGER DEFAULT 100,
         used_count      INTEGER DEFAULT 0,
         expires_at      TIMESTAMPTZ,
         is_active       BOOLEAN DEFAULT true,
+        description     VARCHAR(200),
+        first_order_only BOOLEAN DEFAULT false,
         created_at      TIMESTAMPTZ DEFAULT NOW()
       )
     `)
+    // Add new coupon columns to existing DBs (safe — idempotent)
+    await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS max_discount DECIMAL(10,2)`).catch(()=>{})
+    await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description VARCHAR(200)`).catch(()=>{})
+    await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS first_order_only BOOLEAN DEFAULT false`).catch(()=>{})
 
     // Subscription plans — defined by admin (daily, weekly, monthly, custom, etc.)
     await query(`
@@ -257,6 +264,17 @@ export async function initDb() {
         pincode    VARCHAR(10),
         notes      TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {})
+
+    // Remove existing duplicate addresses (keep oldest per user+address+city+pincode+name)
+    await query(`
+      DELETE FROM user_addresses
+      WHERE id NOT IN (
+        SELECT DISTINCT ON (user_id, LOWER(TRIM(address)), LOWER(TRIM(city)), LOWER(TRIM(pincode)), LOWER(TRIM(name)))
+          id
+        FROM user_addresses
+        ORDER BY user_id, LOWER(TRIM(address)), LOWER(TRIM(city)), LOWER(TRIM(pincode)), LOWER(TRIM(name)), created_at ASC
       )
     `).catch(() => {})
 

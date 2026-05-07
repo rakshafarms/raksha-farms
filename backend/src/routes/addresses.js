@@ -15,10 +15,29 @@ r.get('/', verifyToken, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// POST /api/addresses — save a new address
+// POST /api/addresses — save a new address (skips duplicates by address+city+pincode+name)
 r.post('/', verifyToken, async (req, res) => {
   try {
     const { label, name, phone, address, city, pincode, notes } = req.body
+    // Check for an existing identical address first
+    const existing = await query(
+      `SELECT * FROM user_addresses
+       WHERE user_id=$1
+         AND LOWER(TRIM(address))=$2
+         AND LOWER(TRIM(city))=$3
+         AND LOWER(TRIM(pincode))=$4
+         AND LOWER(TRIM(name))=$5
+       LIMIT 1`,
+      [req.user.id,
+       (address||'').trim().toLowerCase(),
+       (city||'').trim().toLowerCase(),
+       (pincode||'').trim().toLowerCase(),
+       (name||'').trim().toLowerCase()]
+    )
+    if (existing.rows.length > 0) {
+      // Already exists — return the existing row (treat as success)
+      return res.status(200).json(existing.rows[0])
+    }
     const { rows } = await query(
       `INSERT INTO user_addresses (user_id, label, name, phone, address, city, pincode, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,

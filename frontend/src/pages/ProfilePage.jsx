@@ -175,10 +175,16 @@ export default function ProfilePage() {
 
       {/* Profile header */}
       <div className="card p-6 mb-6 flex items-center gap-5 flex-wrap">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-forest-400 to-forest-600 flex items-center justify-center text-white font-black text-3xl shadow-forest flex-shrink-0">
-          {user?.avatar
-            ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover rounded-2xl" />
-            : user?.name?.[0]?.toUpperCase()}
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-forest-400 to-forest-600 flex items-center justify-center text-white font-black text-3xl shadow-forest flex-shrink-0 relative overflow-hidden">
+          {user?.name?.[0]?.toUpperCase()}
+          {user?.avatar && (
+            <img
+              src={user.avatar}
+              alt={user.name}
+              className="absolute inset-0 w-full h-full object-cover rounded-2xl"
+              onError={(e) => { e.currentTarget.style.display = 'none' }}
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-black text-gray-800">{user?.name}</h1>

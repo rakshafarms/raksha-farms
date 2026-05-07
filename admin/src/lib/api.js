@@ -71,10 +71,12 @@ export const customersAPI = {
 
 // ── Coupons ───────────────────────────────────────────
 export const couponsAPI = {
-  getAll: () => api.get('/coupons'),
-  create: (data) => api.post('/coupons', data),
-  update: (id, data) => api.put(`/coupons/${id}`, data),
-  delete: (id) => api.delete(`/coupons/${id}`),
+  getAll:    ()           => api.get('/coupons'),
+  create:    (data)       => api.post('/coupons', data),
+  update:    (id, data)   => api.put(`/coupons/${id}`, data),
+  toggle:    (id)         => api.patch(`/coupons/${id}/toggle`),
+  delete:    (id)         => api.delete(`/coupons/${id}`),
+  available: ()           => api.get('/coupons/available'),
 }
 
 // ── Subscriptions (Admin) ─────────────────────────────
