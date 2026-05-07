@@ -1,128 +1,141 @@
 'use client'
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
-import StatusBadge from '../../components/StatusBadge'
 import { ordersAPI } from '../../lib/api'
-import { Search, RefreshCw, Download, X, AlertTriangle, CheckCircle } from 'lucide-react'
+import {
+  Search, RefreshCw, Download, X, AlertTriangle,
+  CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
+  Package, Clock, CreditCard, Smartphone, Banknote,
+  Calendar, Filter
+} from 'lucide-react'
 
+// ── Constants ─────────────────────────────────────────────────────────────────
 const STATUSES = ['placed','accepted','preparing','out_for_delivery','delivered','cancelled','rejected']
-const STATUS_LABELS = {
-  placed: 'Placed', accepted: 'Accepted', preparing: 'Preparing',
-  out_for_delivery: 'Out for Delivery', delivered: 'Delivered',
-  cancelled: 'Cancelled', rejected: 'Rejected',
-}
-const STATUS_COLORS = {
-  placed: 'bg-blue-100 text-blue-700 border-blue-200',
-  accepted: 'bg-green-100 text-green-700 border-green-200',
-  preparing: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  out_for_delivery: 'bg-purple-100 text-purple-700 border-purple-200',
-  delivered: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  cancelled: 'bg-red-100 text-red-700 border-red-200',
-  rejected: 'bg-red-100 text-red-700 border-red-200',
+const STATUS_META = {
+  placed:           { label: 'Placed',          dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' },
+  accepted:         { label: 'Accepted',         dot: 'bg-teal-500',    pill: 'bg-teal-50 text-teal-700 ring-1 ring-teal-200' },
+  preparing:        { label: 'Preparing',        dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' },
+  out_for_delivery: { label: 'Out for Delivery', dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200' },
+  delivered:        { label: 'Delivered',        dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' },
+  cancelled:        { label: 'Cancelled',        dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-600 ring-1 ring-gray-200' },
+  rejected:         { label: 'Rejected',         dot: 'bg-red-500',     pill: 'bg-red-50 text-red-600 ring-1 ring-red-200' },
 }
 
-// ── Rejection Modal ──────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmt    = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
+const parseAddr = (o) => {
+  try { return typeof o.address === 'string' ? JSON.parse(o.address || '{}') : (o.address || {}) }
+  catch { return {} }
+}
+const parseNotes = (o) => {
+  try {
+    if (!o.notes) return null
+    const p = typeof o.notes === 'string' ? JSON.parse(o.notes) : o.notes
+    return p?.rejected_items?.length ? p : null
+  } catch { return null }
+}
+
+// Date label for grouping – returns "Today", "Yesterday", or "DD MMM YYYY"
+const dateGroupLabel = (iso) => {
+  const d   = new Date(iso)
+  const now = new Date()
+  const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  const ordDay    = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  if (+ordDay === +today)     return 'Today'
+  if (+ordDay === +yesterday) return 'Yesterday'
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })
+}
+
+const fmtTime = (iso) =>
+  new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
+
+// ── Status Badge ─────────────────────────────────────────────────────────────
+function StatusPill({ status, isPartial }) {
+  if (isPartial)
+    return <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 ring-1 ring-orange-200">
+      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"/>{'⚠️'} Partial
+    </span>
+  const m = STATUS_META[status] || { label: status, dot:'bg-gray-400', pill:'bg-gray-100 text-gray-600 ring-1 ring-gray-200' }
+  return <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${m.pill}`}>
+    <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`}/>{m.label}
+  </span>
+}
+
+// ── Reject Modal ──────────────────────────────────────────────────────────────
 function RejectModal({ order, onClose, onConfirm }) {
   const items = Array.isArray(order.items) ? order.items : []
-  const [checkedIds, setCheckedIds] = useState(new Set())  // nothing checked by default
-  const [remarks, setRemarks] = useState('')
+  const [checkedIds, setCheckedIds] = useState(new Set())
+  const [remarks, setRemarks]       = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  function toggle(idx) {
-    setCheckedIds(prev => {
-      const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
-      return next
-    })
-  }
+  const toggle = (idx) => setCheckedIds(prev => {
+    const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next
+  })
+  const allSelected  = checkedIds.size === items.length && items.length > 0
+  const noneSelected = checkedIds.size === 0
+  const isPartial    = checkedIds.size > 0 && checkedIds.size < items.length
+  const rejTotal     = items.filter((_,i) => checkedIds.has(i)).reduce((s,it) => s + it.price * it.quantity, 0)
 
-  const allSelected   = checkedIds.size === items.length && items.length > 0
-  const noneSelected  = checkedIds.size === 0
-  const partialReject = checkedIds.size > 0 && checkedIds.size < items.length
-
-  async function handleSubmit() {
-    if (noneSelected) { alert('Please check at least one item to reject'); return }
+  async function submit() {
+    if (noneSelected) { alert('Select at least one item'); return }
     setSubmitting(true)
-    const rejectedItems = items
-      .filter((_, i) => checkedIds.has(i))
-      .map(item => ({ id: item.id, name: item.name, quantity: item.quantity, price: item.price, unit: item.unit, emoji: item.emoji }))
-    const newStatus = allSelected ? 'rejected' : 'accepted'
-    await onConfirm(newStatus, remarks, rejectedItems)
+    const rejected = items.filter((_,i) => checkedIds.has(i))
+      .map(it => ({ id:it.id, name:it.name, quantity:it.quantity, price:it.price, unit:it.unit, emoji:it.emoji }))
+    await onConfirm(allSelected ? 'rejected' : 'accepted', remarks, rejected)
     setSubmitting(false)
   }
 
-  const rejectedTotal = items.filter((_,i) => checkedIds.has(i)).reduce((s,it) => s + it.price * it.quantity, 0)
-
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Reject Order Items</h2>
-            <p className="text-xs text-gray-500 mt-0.5">#{order.reference_id || order.id?.slice(0,8)}</p>
+            <h2 className="text-base font-bold text-gray-900">Reject Order Items</h2>
+            <p className="text-xs text-gray-400 mt-0.5">#{order.reference_id || order.id?.slice(0,8)}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-            <X size={18} />
-          </button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X size={16}/></button>
         </div>
 
-        {/* Items */}
-        <div className="px-6 py-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Select items to reject:</p>
-          <div className="space-y-2 max-h-56 overflow-y-auto">
-            {items.map((item, i) => (
-              <label key={i} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${checkedIds.has(i) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}>
-                <input type="checkbox" checked={checkedIds.has(i)} onChange={() => toggle(i)}
-                  className="w-4 h-4 accent-red-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{item.emoji} {item.name}</p>
-                  <p className="text-xs text-gray-500">× {item.quantity} {item.unit} · ₹{item.price * item.quantity}</p>
-                </div>
-                {checkedIds.has(i) && (
-                  <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold flex-shrink-0">Reject</span>
-                )}
-              </label>
-            ))}
+        <div className="px-6 py-4 space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Select items to reject</p>
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {items.map((item, i) => (
+                <label key={i} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checkedIds.has(i) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}>
+                  <input type="checkbox" checked={checkedIds.has(i)} onChange={() => toggle(i)} className="w-4 h-4 accent-red-500 flex-shrink-0"/>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{item.emoji} {item.name}</p>
+                    <p className="text-xs text-gray-400">× {item.quantity} {item.unit} · {fmt(item.price * item.quantity)}</p>
+                  </div>
+                  {checkedIds.has(i) && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold flex-shrink-0">Reject</span>}
+                </label>
+              ))}
+            </div>
           </div>
 
-          {/* Summary */}
-          {noneSelected ? (
-            <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500">
-              ☝️ Check the items above that you want to <strong>reject</strong>
-            </div>
-          ) : (
-            <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-xl text-sm">
-              {allSelected && <p className="text-orange-700 font-semibold">⚠️ All items rejected → Order status: <span className="text-red-600">Rejected</span></p>}
-              {partialReject && <p className="text-orange-700 font-semibold">⚠️ Partial rejection → Order status: <span className="text-green-600">Accepted</span> (only checked items rejected)</p>}
-              <p className="text-orange-600 text-xs mt-1">Rejected value: ₹{rejectedTotal} — stock will be restored automatically</p>
+          {!noneSelected && (
+            <div className={`p-3 rounded-xl text-xs ${allSelected ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+              <p className={`font-bold ${allSelected ? 'text-red-700' : 'text-amber-700'}`}>
+                {allSelected ? '❌ Full rejection → status: Rejected' : `⚠️ Partial rejection (${checkedIds.size}/${items.length} items) → status: Accepted`}
+              </p>
+              <p className="text-gray-500 mt-0.5">Rejected value: {fmt(rejTotal)} — stock restored automatically</p>
             </div>
           )}
 
-          {/* Remarks */}
-          <div className="mt-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Remarks / Reason <span className="text-gray-400 font-normal">(shown to customer)</span></label>
-            <textarea
-              value={remarks}
-              onChange={e => setRemarks(e.target.value)}
-              placeholder="e.g. Item out of stock, quality issue, not available today…"
-              rows={3}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
-            />
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Reason <span className="font-normal normal-case text-gray-400">(shown to customer)</span></label>
+            <textarea value={remarks} onChange={e => setRemarks(e.target.value)}
+              placeholder="e.g. Out of stock, quality issue…" rows={3}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 resize-none"/>
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3 px-6 pb-5">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || noneSelected}
-            className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-bold rounded-xl text-sm transition-colors"
-          >
-            {submitting ? 'Processing…' : allSelected ? '❌ Reject Order' : '⚠️ Partial Reject'}
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm transition-colors">Cancel</button>
+          <button onClick={submit} disabled={submitting || noneSelected}
+            className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-40 text-white font-bold rounded-xl text-sm transition-colors">
+            {submitting ? 'Processing…' : allSelected ? 'Reject Order' : 'Partial Reject'}
           </button>
         </div>
       </div>
@@ -130,24 +143,207 @@ function RejectModal({ order, onClose, onConfirm }) {
   )
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ── Order Row (expanded card) ──────────────────────────────────────────────────
+function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject }) {
+  const isOpen  = expanded === o.id
+  const addr    = parseAddr(o)
+  const notes   = parseNotes(o)
+  const partial = notes && o.status === 'accepted'
+  const isFinal = ['delivered','cancelled','rejected'].includes(o.status)
+  const phone   = addr.phone || o.customer_phone || ''
+  const name    = addr.name  || o.customer_name  || 'Guest'
+
+  return (
+    <div className={`border border-gray-100 rounded-2xl overflow-hidden transition-shadow hover:shadow-md ${isOpen ? 'shadow-md' : 'shadow-sm'}`}>
+      {/* ── Summary row ── */}
+      <div
+        className="flex items-center gap-3 px-4 py-3.5 bg-white cursor-pointer select-none"
+        onClick={onToggle}
+      >
+        {/* Avatar */}
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#1B4332] to-emerald-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+          {name[0]?.toUpperCase()}
+        </div>
+
+        {/* Name + time */}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{name}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{phone} · {fmtTime(o.created_at)}</p>
+        </div>
+
+        {/* Items preview */}
+        <div className="hidden sm:block flex-1 min-w-0 text-xs text-gray-500 truncate px-2">
+          {(Array.isArray(o.items) ? o.items : []).slice(0,2).map(it => it.name).join(', ')}
+          {(o.items?.length || 0) > 2 ? ` +${o.items.length - 2} more` : ''}
+        </div>
+
+        {/* Payment */}
+        <div className="hidden md:flex flex-shrink-0">
+          {o.payment_method === 'upi'
+            ? <span className="flex items-center gap-1 text-xs font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-lg"><Smartphone size={11}/>UPI</span>
+            : o.payment_method === 'card'
+            ? <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg"><CreditCard size={11}/>Card</span>
+            : <span className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-lg"><Banknote size={11}/>COD</span>
+          }
+        </div>
+
+        {/* Amount */}
+        <div className="flex-shrink-0 text-right">
+          {notes && notes.original_total > Number(o.total) && (
+            <p className="text-[10px] text-gray-400 line-through leading-none">{fmt(notes.original_total)}</p>
+          )}
+          <p className="font-bold text-gray-900 text-sm">{fmt(o.total)}</p>
+        </div>
+
+        {/* Status */}
+        <div className="flex-shrink-0 ml-2">
+          <StatusPill status={o.status} isPartial={partial}/>
+        </div>
+
+        {/* Actions (stop propagation) */}
+        <div className="flex-shrink-0 flex items-center gap-1.5 ml-2" onClick={e => e.stopPropagation()}>
+          <select
+            value={o.status}
+            onChange={e => onChangeStatus(o.id, e.target.value)}
+            disabled={isFinal}
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1B4332] bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
+          </select>
+          {!isFinal && (
+            <button
+              onClick={() => onReject({ ...o, items: Array.isArray(o.items) ? o.items : [] })}
+              title="Reject items"
+              className="p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+            >
+              <AlertTriangle size={14}/>
+            </button>
+          )}
+        </div>
+
+        {/* Expand icon */}
+        <div className="flex-shrink-0 text-gray-300">
+          {isOpen ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+        </div>
+      </div>
+
+      {/* ── Expanded detail ── */}
+      {isOpen && (
+        <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+            {/* Items list — 3 cols */}
+            <div className="md:col-span-3">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Items Ordered</p>
+
+              {/* Partial rejection banner */}
+              {notes?.rejected_items?.length > 0 && (
+                <div className={`mb-3 px-3 py-2.5 rounded-xl text-xs border ${partial ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+                  <p className={`font-bold mb-1.5 ${partial ? 'text-amber-700' : 'text-red-700'}`}>
+                    {partial ? '⚠️ Partially Rejected' : '❌ All Items Rejected'}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {notes.rejected_items.map((r, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-red-100 text-red-700 font-semibold rounded-full">
+                        ✕ {r.name}
+                      </span>
+                    ))}
+                  </div>
+                  {notes.remarks && <p className="mt-1.5 text-gray-500 italic">"{notes.remarks}"</p>}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                {(Array.isArray(o.items) ? o.items : []).map((item, i) => {
+                  const rej = notes?.rejected_items?.some(r => r.id === item.id || r.name === item.name)
+                  return (
+                    <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-xl text-sm ${rej ? 'bg-red-50 opacity-60' : 'bg-white border border-gray-100'}`}>
+                      <span className={`flex items-center gap-2 ${rej ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                        <span>{item.emoji}</span>
+                        <span>{item.name}</span>
+                        <span className="text-gray-400 text-xs">× {item.quantity} {item.unit}</span>
+                        {rej && <span className="no-underline not-italic text-[10px] bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-bold ml-1">Rejected</span>}
+                      </span>
+                      <span className={`font-semibold flex-shrink-0 ml-2 ${rej ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                        {fmt(item.price * item.quantity)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex justify-between items-center mt-2.5 px-3 py-2 bg-white rounded-xl border border-gray-100 font-bold text-gray-900 text-sm">
+                <span>Order Total</span>
+                <span>{fmt(o.total)}</span>
+              </div>
+            </div>
+
+            {/* Delivery info — 2 cols */}
+            <div className="md:col-span-2 space-y-3">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Delivery Details</p>
+                <div className="bg-white border border-gray-100 rounded-xl p-3 space-y-2.5 text-sm">
+                  <div className="flex items-start gap-2">
+                    <Package size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                    <div>
+                      <p className="font-semibold text-gray-800">{addr.name || o.customer_name || '—'}</p>
+                      {o.customer_email && <p className="text-xs text-gray-400">{o.customer_email}</p>}
+                    </div>
+                  </div>
+                  {phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone size={13} className="text-gray-400 flex-shrink-0"/>
+                      <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`} className="text-gray-700 hover:text-[#1B4332] font-medium text-sm">{phone}</a>
+                    </div>
+                  )}
+                  {addr.address && (
+                    <div className="flex items-start gap-2">
+                      <MapPin size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                      <p className="text-gray-600 text-xs leading-relaxed">{addr.address}{addr.city ? `, ${addr.city}` : ''}{addr.pincode ? ` — ${addr.pincode}` : ''}</p>
+                    </div>
+                  )}
+                  {addr.slot && (
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} className="text-gray-400 flex-shrink-0"/>
+                      <span className="text-xs text-gray-600">{addr.slot}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick call */}
+              {phone && (
+                <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-[#1B4332] hover:bg-[#15362a] text-white text-xs font-bold rounded-xl transition-colors">
+                  <Phone size={13}/> Call Customer
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
-  const [orders, setOrders]     = useState([])
-  const [total, setTotal]       = useState(0)
-  const [page, setPage]         = useState(1)
-  const [status, setStatus]     = useState('')
-  const [search, setSearch]     = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate]     = useState('')
-  const [loading, setLoading]   = useState(true)
-  const [expanded, setExpanded] = useState(null)
+  const [orders, setOrders]         = useState([])
+  const [total, setTotal]           = useState(0)
+  const [pages, setPages]           = useState(1)
+  const [page, setPage]             = useState(1)
+  const [status, setStatus]         = useState('')
+  const [search, setSearch]         = useState('')
+  const [fromDate, setFromDate]     = useState('')
+  const [toDate, setToDate]         = useState('')
+  const [loading, setLoading]       = useState(true)
+  const [expanded, setExpanded]     = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
   const [downloading, setDownloading] = useState(false)
-  const [toast, setToast]       = useState(null)  // { msg, type: 'success'|'error' }
-  const [tick, setTick]         = useState(0)     // increment to force a reload
-
-  // Keep latest filter state in a ref so async handlers always read fresh values
+  const [toast, setToast]           = useState(null)
+  const [tick, setTick]             = useState(0)
   const filtersRef = useRef({ page, status, search, fromDate, toDate })
+
   useEffect(() => { filtersRef.current = { page, status, search, fromDate, toDate } }, [page, status, search, fromDate, toDate])
 
   function showToast(msg, type = 'success') {
@@ -155,7 +351,6 @@ export default function OrdersPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // Central load — always reads fresh filters from ref
   const load = useCallback(async (overrides = {}) => {
     setLoading(true)
     try {
@@ -172,27 +367,24 @@ export default function OrdersPage() {
       const { data } = await ordersAPI.getAll(params)
       setOrders(data.orders || [])
       setTotal(data.total   || 0)
+      setPages(data.pages   || 1)
     } catch(e) {
-      console.error('load error', e)
+      showToast('Failed to load orders', 'error')
     } finally {
       setLoading(false)
     }
-  }, []) // no deps — reads from ref
+  }, [])
 
-  // Re-run load whenever page/status/dates change OR tick is bumped
   useEffect(() => { load() }, [page, status, fromDate, toDate, tick, load])
 
   function forceReload() { setTick(t => t + 1) }
-
-  function applySearch() { setPage(1); load({ page: 1, search }) }
-
+  function applySearch() { setPage(1); load({ page:1, search }) }
   function changeFilter(key, val) {
     setPage(1)
     if (key === 'status')   setStatus(val)
     if (key === 'fromDate') setFromDate(val)
     if (key === 'toDate')   setToDate(val)
   }
-
   function clearFilters() {
     setStatus(''); setSearch(''); setFromDate(''); setToDate(''); setPage(1)
     forceReload()
@@ -201,390 +393,251 @@ export default function OrdersPage() {
   async function changeStatus(id, newStatus) {
     try {
       await ordersAPI.updateStatus(id, newStatus)
-      // Immediate optimistic update — no forceReload (would overwrite with stale data)
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o))
+      showToast('Status updated')
     } catch(e) {
-      showToast(e.response?.data?.error || 'Status update failed', 'error')
+      showToast(e.response?.data?.error || 'Update failed', 'error')
     }
   }
 
   async function handleRejectConfirm(orderId, newStatus, remarks, rejectedItems) {
     try {
-      await ordersAPI.updateStatus(orderId, newStatus, {
-        rejection_notes: remarks,
-        rejected_items:  rejectedItems,
-      })
-
-      // Build rejection info locally — don't rely on backend response
-      // because Render may be running old code that doesn't save notes/total
-      const original   = orders.find(o => o.id === orderId)
-      const allItems   = Array.isArray(original?.items) ? original.items : []
-      const deliveryFee = Number(original?.delivery_fee || 0)
-
-      // Compute originalTotal from items (more reliable than stored total field,
-      // which can be 0 if backend had a parse error or prior bad state)
-      const itemsSubtotal  = allItems.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
-      const originalTotal  = itemsSubtotal > 0 ? itemsSubtotal + deliveryFee : Number(original?.total || 0)
-
-      const rejectedAmount = rejectedItems.reduce((s, ri) => s + Number(ri.price || 0) * Number(ri.quantity || 1), 0)
-      const allRejected    = rejectedItems.length >= (allItems.length || original?.items?.length || 0)
-      const adjustedTotal  = allRejected ? 0 : Math.max(deliveryFee, originalTotal - rejectedAmount)
-
-      const localNotes = JSON.stringify({
-        remarks,
-        rejected_items:  rejectedItems,
-        original_total:  originalTotal,
-        rejected_amount: rejectedAmount,
-        adjusted_total:  adjustedTotal,
-      })
-
-      setOrders(prev => prev.map(o => {
-        if (o.id !== orderId) return o
-        return {
-          ...o,
-          status: newStatus,
-          total:  adjustedTotal,
-          notes:  localNotes,
-        }
-      }))
-
+      await ordersAPI.updateStatus(orderId, newStatus, { rejection_notes: remarks, rejected_items: rejectedItems })
+      const orig   = orders.find(o => o.id === orderId)
+      const allIt  = Array.isArray(orig?.items) ? orig.items : []
+      const fee    = Number(orig?.delivery_fee || 0)
+      const sub    = allIt.reduce((s,it) => s + Number(it.price||0)*Number(it.quantity||1), 0)
+      const origTotal = sub > 0 ? sub + fee : Number(orig?.total || 0)
+      const rejAmt = rejectedItems.reduce((s,r) => s + Number(r.price||0)*Number(r.quantity||1), 0)
+      const all    = rejectedItems.length >= allIt.length
+      const adj    = all ? 0 : Math.max(fee, origTotal - rejAmt)
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, total: adj, notes: JSON.stringify({ remarks, rejected_items: rejectedItems, original_total: origTotal, rejected_amount: rejAmt, adjusted_total: adj }) } : o))
       setRejectOrder(null)
-      showToast(newStatus === 'rejected' ? '❌ Order rejected' : '⚠️ Partial rejection saved')
+      showToast(newStatus === 'rejected' ? 'Order fully rejected' : 'Partial rejection saved')
     } catch(e) {
-      const msg = e.response?.data?.error || e.message || 'Failed to reject order'
-      console.error('reject error:', e)
-      showToast(msg, 'error')
+      showToast(e.response?.data?.error || 'Rejection failed', 'error')
     }
   }
 
-  // ── CSV Download ──
   async function downloadCSV() {
     setDownloading(true)
     try {
-      const params = { page: 1, limit: 1000, status, search, from_date: fromDate, to_date: toDate }
+      const params = { page:1, limit:1000, status, search, from_date:fromDate, to_date:toDate }
       Object.keys(params).forEach(k => !params[k] && delete params[k])
       const { data } = await ordersAPI.getAll(params)
       const rows = data.orders || []
-      const headers = ['Order ID', 'Customer', 'Phone', 'Address', 'Items', 'Payment', 'Status', 'Total', 'Date']
+      const headers = ['Order ID','Customer','Phone','Address','Items','Payment','Status','Total','Date']
       const lines = rows.map(o => {
-        const addr = (() => { try { return typeof o.address === 'string' ? JSON.parse(o.address || '{}') : (o.address || {}) } catch { return {} } })()
-        const items = (Array.isArray(o.items) ? o.items : []).map(i => `${i.name}×${i.quantity}`).join(' | ')
+        const a = parseAddr(o)
+        const items = (Array.isArray(o.items)?o.items:[]).map(i=>`${i.name}×${i.quantity}`).join(' | ')
+        const d = new Date(o.created_at)
+        const pad = n => String(n).padStart(2,'0')
         return [
-          (() => { const d = new Date(o.created_at); const p = n => String(n).padStart(2,'0'); return `${p(d.getDate())}${p(d.getMonth()+1)}${d.getFullYear()}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` })(),
-          addr.name || o.customer_name || 'Guest',
-          addr.phone || o.customer_phone || '',
-          (addr.address || '').replace(/,/g, ';'),
+          `${pad(d.getDate())}${pad(d.getMonth()+1)}${d.getFullYear()}${pad(d.getHours())}${pad(d.getMinutes())}`,
+          a.name||o.customer_name||'Guest',
+          a.phone||o.customer_phone||'',
+          (a.address||'').replace(/,/g,';'),
           items,
-          o.payment_method || '',
-          STATUS_LABELS[o.status] || o.status,
+          o.payment_method||'',
+          STATUS_META[o.status]?.label||o.status,
           o.total,
-          new Date(o.created_at).toLocaleDateString('en-IN'),
-        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+          d.toLocaleDateString('en-IN'),
+        ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')
       })
-      const csv = [headers.join(','), ...lines].join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const blob = new Blob([[headers.join(','),...lines].join('\n')], { type:'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url
-      a.download = `orders-${new Date().toISOString().slice(0,10)}.csv`
-      a.click(); URL.revokeObjectURL(url)
-    } catch(e) { alert('Download failed') }
+      const a = document.createElement('a'); a.href=url; a.download=`orders-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
+    } catch { alert('Download failed') }
     finally { setDownloading(false) }
   }
 
-  const activeFilterCount = [status, search, fromDate, toDate].filter(Boolean).length
+  // Group orders by IST date
+  const grouped = []
+  const seen = {}
+  for (const o of orders) {
+    const label = dateGroupLabel(o.created_at)
+    if (!seen[label]) { seen[label] = true; grouped.push({ label, orders:[] }) }
+    grouped[grouped.length-1].orders.push(o)
+  }
+
+  const activeFilters = [status, search, fromDate, toDate].filter(Boolean).length
 
   return (
     <AdminLayout title="Orders">
-      {/* Toast */}
+      {/* ── Toast ── */}
       {toast && (
-        <div className={`fixed top-5 right-5 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-semibold transition-all
-          ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-500'}`}>
-          {toast.type === 'success' ? <CheckCircle size={16}/> : <AlertTriangle size={16}/>}
+        <div className={`fixed top-5 right-5 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-semibold animate-in slide-in-from-top-2
+          ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-500'}`}>
+          {toast.type === 'success' ? <CheckCircle size={15}/> : <AlertTriangle size={15}/>}
           {toast.msg}
         </div>
       )}
 
-      {/* Rejection modal */}
       {rejectOrder && (
         <RejectModal
           order={rejectOrder}
           onClose={() => setRejectOrder(null)}
-          onConfirm={(newStatus, remarks, rejectedItems) =>
-            handleRejectConfirm(rejectOrder.id, newStatus, remarks, rejectedItems)}
+          onConfirm={(s,r,items) => handleRejectConfirm(rejectOrder.id, s, r, items)}
         />
       )}
 
-      {/* ── Filters Row ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
-        <div className="flex flex-wrap gap-3 items-end">
+      {/* ── Header row ── */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-extrabold text-gray-900">Orders</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{total.toLocaleString()} total · Page {page} of {pages}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={forceReload} className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors" title="Refresh">
+            <RefreshCw size={15} className={loading ? 'animate-spin text-gray-400' : 'text-gray-500'}/>
+          </button>
+          <button onClick={downloadCSV} disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600 disabled:opacity-50 transition-colors">
+            <Download size={14}/>{downloading ? 'Exporting…' : 'Export CSV'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5 space-y-3">
+        {/* Row 1: search + dates */}
+        <div className="flex flex-wrap gap-2 items-center">
           {/* Search */}
-          <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 flex-1 min-w-48">
-            <Search size={15} className="text-gray-400 flex-shrink-0"/>
+          <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 flex-1 min-w-52">
+            <Search size={14} className="text-gray-400 flex-shrink-0"/>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && applySearch()}
-              placeholder="Search by name, phone or order ID…"
-              className="outline-none text-sm flex-1 min-w-0"
+              placeholder="Search by name, phone, email or order ID…"
+              className="outline-none text-sm flex-1 min-w-0 bg-transparent"
             />
-            {search && <button onClick={() => { setSearch(''); load({ search: '' }) }}><X size={13} className="text-gray-400 hover:text-gray-600"/></button>}
+            {search && <button onClick={() => { setSearch(''); load({ search:'' }) }}><X size={12} className="text-gray-400 hover:text-gray-600"/></button>}
           </div>
 
           {/* Date range */}
           <div className="flex items-center gap-2">
-            <input type="date" value={fromDate} onChange={e => changeFilter('fromDate', e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none text-gray-600"/>
-            <span className="text-gray-400 text-sm">to</span>
-            <input type="date" value={toDate} onChange={e => changeFilter('toDate', e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none text-gray-600"/>
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-500">
+              <Calendar size={13} className="text-gray-400"/>
+              <input type="date" value={fromDate} onChange={e => changeFilter('fromDate', e.target.value)}
+                className="outline-none text-sm text-gray-700 bg-transparent w-28"/>
+            </div>
+            <span className="text-gray-300 text-sm">—</span>
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <Calendar size={13} className="text-gray-400"/>
+              <input type="date" value={toDate} onChange={e => changeFilter('toDate', e.target.value)}
+                className="outline-none text-sm text-gray-700 bg-transparent w-28"/>
+            </div>
           </div>
 
-          {/* Refresh + Download */}
-          <button onClick={forceReload} className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors" title="Refresh">
-            <RefreshCw size={16} className={loading ? 'animate-spin text-gray-400' : 'text-gray-500'}/>
-          </button>
-          <button onClick={downloadCSV} disabled={downloading}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600 disabled:opacity-50 transition-colors">
-            <Download size={15}/> {downloading ? 'Exporting…' : 'Export CSV'}
-          </button>
-          {activeFilterCount > 0 && (
-            <button onClick={clearFilters} className="flex items-center gap-1 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium hover:bg-red-100 transition-colors">
-              <X size={13}/> Clear ({activeFilterCount})
+          {activeFilters > 0 && (
+            <button onClick={clearFilters}
+              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors">
+              <X size={12}/> Clear {activeFilters > 1 ? `(${activeFilters})` : ''}
             </button>
           )}
         </div>
 
-        {/* Status filter pills */}
-        <div className="flex flex-wrap gap-2 mt-3">
+        {/* Row 2: status filter pills */}
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => changeFilter('status', '')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${!status ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
-            All ({total})
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${!status ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+            All {!status && total > 0 ? `(${total})` : ''}
           </button>
           {STATUSES.map(s => (
             <button key={s} onClick={() => changeFilter('status', s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${status === s ? STATUS_COLORS[s] + ' !border-current' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
-              {STATUS_LABELS[s]}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                status === s
+                  ? `${STATUS_META[s].pill} border-transparent`
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              }`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${status === s ? STATUS_META[s].dot : 'bg-gray-300'}`}/>
+              {STATUS_META[s].label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Table ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Order ID</th>
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Customer</th>
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Items</th>
-                <th className="text-right px-4 py-3 text-gray-500 font-medium">Total</th>
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Payment</th>
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Status</th>
-                <th className="text-left px-4 py-3 text-gray-500 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td colSpan={7} className="py-16 text-center">
-                  <div className="inline-block w-6 h-6 border-2 border-[#1B4332] border-t-transparent rounded-full animate-spin"/>
-                </td></tr>
-              )}
-              {!loading && orders.length === 0 && (
-                <tr><td colSpan={7} className="py-16 text-center text-gray-400">
-                  <div className="text-3xl mb-2">📦</div>
-                  No orders found
-                </td></tr>
-              )}
-              {orders.map(o => {
-                const isOpen = expanded === o.id
-                const addr = (() => { try { return typeof o.address === 'string' ? JSON.parse(o.address || '{}') : (o.address || {}) } catch { return {} } })()
-                const rejectionInfo = (() => {
-                  try {
-                    if (!o.notes) return null
-                    const p = typeof o.notes === 'string' ? JSON.parse(o.notes) : o.notes
-                    return p?.rejected_items?.length ? p : null
-                  } catch { return null }
-                })()
-                const isPartialRejection = rejectionInfo && o.status === 'accepted'
+      {/* ── Orders list ── */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-3">
+          <div className="w-8 h-8 border-3 border-[#1B4332] border-t-transparent rounded-full animate-spin"/>
+          <p className="text-sm text-gray-400">Loading orders…</p>
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-gray-400 gap-3">
+          <Package size={40} className="opacity-30"/>
+          <p className="text-sm font-medium">No orders found</p>
+          {activeFilters > 0 && <button onClick={clearFilters} className="text-xs text-[#1B4332] font-semibold underline">Clear filters</button>}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {grouped.map(({ label, orders: dayOrders }) => (
+            <div key={label}>
+              {/* Date group header */}
+              <div className="flex items-center gap-3 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-lg ${
+                    label === 'Today' ? 'bg-emerald-100 text-emerald-700' :
+                    label === 'Yesterday' ? 'bg-blue-50 text-blue-600' :
+                    'bg-gray-100 text-gray-500'
+                  }`}>{label}</span>
+                  <span className="text-xs text-gray-400 font-medium">{dayOrders.length} order{dayOrders.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="flex-1 h-px bg-gray-100"/>
+              </div>
 
+              {/* Orders for this day */}
+              <div className="space-y-2">
+                {dayOrders.map(o => (
+                  <OrderRow
+                    key={o.id}
+                    o={o}
+                    expanded={expanded}
+                    onToggle={() => setExpanded(expanded === o.id ? null : o.id)}
+                    onChangeStatus={changeStatus}
+                    onReject={setRejectOrder}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Pagination ── */}
+      {!loading && orders.length > 0 && (
+        <div className="flex items-center justify-between mt-6 py-3 border-t border-gray-100">
+          <p className="text-xs text-gray-400">
+            Showing {((page-1)*15)+1}–{Math.min(page*15, total)} of <span className="font-semibold text-gray-600">{total}</span> orders
+            {activeFilters > 0 && <span className="ml-1 text-[#1B4332] font-semibold">(filtered)</span>}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)}
+              className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-30 hover:bg-gray-50 transition-colors"
+            >← Prev</button>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
+                const p = page <= 3 ? i + 1 : page - 2 + i
+                if (p < 1 || p > pages) return null
                 return (
-                  <React.Fragment key={o.id}>
-                    <tr
-                      onClick={() => setExpanded(isOpen ? null : o.id)}
-                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer select-none transition-colors">
-                      {/* Order ID */}
-                      <td className="px-4 py-3">
-                        <p className="font-mono text-xs font-semibold text-[#1B4332] whitespace-nowrap tracking-wide">
-                          {(() => {
-                            const d = new Date(o.created_at)
-                            const pad = n => String(n).padStart(2,'0')
-                            return `${pad(d.getDate())}${pad(d.getMonth()+1)}${d.getFullYear()}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
-                          })()}
-                        </p>
-                      </td>
-                      {/* Customer */}
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{addr.name || o.customer_name || 'Guest'}</p>
-                        <p className="text-xs text-gray-400">{addr.phone || o.customer_phone}</p>
-                      </td>
-                      {/* Items */}
-                      <td className="px-4 py-3 text-gray-600">
-                        <p>{Array.isArray(o.items) ? o.items.length : 0} items</p>
-                        <p className="text-xs text-gray-400 truncate max-w-32">
-                          {(Array.isArray(o.items) ? o.items : []).slice(0,2).map(i => i.name).join(', ')}
-                          {(Array.isArray(o.items) ? o.items.length : 0) > 2 ? '…' : ''}
-                        </p>
-                        {/* Show rejected items inline so admin knows at a glance */}
-                        {rejectionInfo?.rejected_items?.length > 0 && (
-                          <p className="text-xs text-red-500 font-semibold mt-0.5 truncate max-w-36">
-                            ❌ {rejectionInfo.rejected_items.map(r => r.name).join(', ')}
-                          </p>
-                        )}
-                      </td>
-                      {/* Total */}
-                      <td className="px-4 py-3 text-right">
-                        {isPartialRejection && rejectionInfo.original_total > Number(o.total) && (
-                          <p className="text-xs text-gray-400 line-through">₹{Number(rejectionInfo.original_total).toLocaleString()}</p>
-                        )}
-                        <p className="font-bold text-gray-800">₹{Number(o.total).toLocaleString()}</p>
-                      </td>
-                      {/* Payment */}
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                          o.payment_method === 'upi'  ? 'bg-purple-100 text-purple-700' :
-                          o.payment_method === 'card' ? 'bg-blue-100 text-blue-700' :
-                                                        'bg-gray-100 text-gray-600'
-                        }`}>
-                          {o.payment_method === 'upi'  ? '📱 UPI' :
-                           o.payment_method === 'card' ? '💳 Card' :
-                                                         '💵 COD'}
-                        </span>
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        {isPartialRejection ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                            ⚠️ Partial
-                          </span>
-                        ) : (
-                          <StatusBadge status={o.status}/>
-                        )}
-                      </td>
-                      {/* Actions */}
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-1.5">
-                          <select value={o.status} onChange={e => changeStatus(o.id, e.target.value)}
-                            disabled={['rejected', 'cancelled', 'delivered'].includes(o.status)}
-                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1B4332] bg-white disabled:opacity-50 disabled:cursor-not-allowed">
-                            {STATUSES.map(s =>
-                              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                            )}
-                          </select>
-                          {!['delivered', 'cancelled', 'rejected'].includes(o.status) && (
-                            <button
-                              onClick={() => setRejectOrder({...o, items: Array.isArray(o.items) ? o.items : []})}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors"
-                              title="Reject order (with item selection)">
-                              <AlertTriangle size={14}/>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-
-                    {/* Expanded row */}
-                    {isOpen && (
-                      <tr className="bg-green-50/60 border-b border-gray-100">
-                        <td colSpan={7} className="px-6 py-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            {/* Items */}
-                            <div className="md:col-span-2">
-                              <p className="font-semibold text-gray-700 mb-2">🛒 Items Ordered</p>
-
-                              {/* Rejection summary banner — shown when any items rejected */}
-                              {rejectionInfo?.rejected_items?.length > 0 && (
-                                <div className={`mb-3 p-3 rounded-xl border ${isPartialRejection ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'}`}>
-                                  <p className={`text-xs font-bold mb-1 ${isPartialRejection ? 'text-orange-700' : 'text-red-700'}`}>
-                                    {isPartialRejection ? '⚠️ Partially Rejected' : '❌ All Items Rejected'}
-                                  </p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {rejectionInfo.rejected_items.map((r, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">
-                                        ✕ {r.name}
-                                        {r.quantity && r.price ? <span className="font-normal opacity-70">×{r.quantity} ₹{r.price * r.quantity}</span> : null}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  {rejectionInfo?.remarks && (
-                                    <p className="mt-2 text-xs text-red-600 italic">"{rejectionInfo.remarks}"</p>
-                                  )}
-                                </div>
-                              )}
-
-                              <div className="space-y-1.5">
-                                {(Array.isArray(o.items) ? o.items : []).map((item, i) => {
-                                  const isRejected = rejectionInfo?.rejected_items?.some(r => r.id === item.id || r.name === item.name)
-                                  return (
-                                    <div key={i} className={`flex justify-between items-center text-gray-600 px-3 py-1.5 rounded-lg ${isRejected ? 'bg-red-50 text-red-400' : 'bg-white'}`}>
-                                      <span className={`flex items-center gap-1.5 ${isRejected ? 'line-through' : ''}`}>
-                                        {item.emoji} {item.name} × {item.quantity} {item.unit}
-                                        {isRejected && <span className="no-underline text-[10px] bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-bold not-italic ml-1">Rejected</span>}
-                                      </span>
-                                      <span className={`font-semibold ${isRejected ? 'line-through' : ''}`}>₹{item.price * item.quantity}</span>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                              <div className="mt-2 pt-2 border-t border-green-200 flex justify-between font-bold text-gray-800 px-3">
-                                <span>Total</span><span>₹{Number(o.total).toLocaleString()}</span>
-                              </div>
-                            </div>
-
-                            {/* Delivery */}
-                            <div>
-                              <p className="font-semibold text-gray-700 mb-2">📍 Delivery Details</p>
-                              <div className="space-y-1.5 text-gray-600 bg-white p-3 rounded-xl">
-                                <p><span className="text-gray-400 text-xs">Name</span><br/>{addr.name || o.customer_name || '—'}</p>
-                                <p><span className="text-gray-400 text-xs">Phone</span><br/>{addr.phone || o.customer_phone || '—'}</p>
-                                <p><span className="text-gray-400 text-xs">Address</span><br/>{addr.address || '—'}</p>
-                                {addr.slot && <p><span className="text-gray-400 text-xs">Slot</span><br/>{addr.slot}</p>}
-                                <p><span className="text-gray-400 text-xs">Payment</span><br/>{o.payment_method === 'cod' ? 'Cash on Delivery' : (o.payment_method || '').toUpperCase()}</p>
-                              </div>
-                              {/* Call quick contact */}
-                              {(addr.phone || o.customer_phone) && (
-                                <a href={`tel:+91${(addr.phone || o.customer_phone).replace(/\D/g,'').slice(-10)}`}
-                                  className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 bg-[#1B4332] hover:bg-[#15362a] text-white text-xs font-semibold rounded-xl transition-colors">
-                                  📞 Call Customer
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                  <button key={p} onClick={() => setPage(p)}
+                    className={`w-8 h-8 text-xs font-bold rounded-lg transition-colors ${p === page ? 'bg-[#1B4332] text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    {p}
+                  </button>
                 )
               })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-          <p className="text-sm text-gray-500">
-            Showing {orders.length} of {total} orders
-            {(status || search || fromDate || toDate) && <span className="ml-2 text-[#1B4332] font-medium">(filtered)</span>}
-          </p>
-          <div className="flex gap-2">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors">← Prev</button>
-            <span className="px-3 py-1.5 text-sm font-semibold text-gray-700">Page {page}</span>
-            <button disabled={orders.length < 15} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors">Next →</button>
+            </div>
+            <button
+              disabled={page >= pages}
+              onClick={() => setPage(p => p + 1)}
+              className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-30 hover:bg-gray-50 transition-colors"
+            >Next →</button>
           </div>
         </div>
-      </div>
+      )}
     </AdminLayout>
   )
 }

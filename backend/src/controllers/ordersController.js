@@ -248,23 +248,67 @@ export async function createOrder(req, res) {
 export async function getOrders(req, res) {
   try {
     const { status, page = 1, limit = 20, search, from_date, to_date } = req.query
-    const offset = (page - 1) * limit
-    let sql = `SELECT o.*, u.name as customer_name, u.phone as customer_phone
-               FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE 1=1`
-    const params = []
-    if (status) { params.push(status); sql += ` AND o.status=$${params.length}` }
-    if (search) {
-      params.push(`%${search}%`)
-      sql += ` AND (u.name ILIKE $${params.length} OR u.phone ILIKE $${params.length} OR o.reference_id ILIKE $${params.length} OR o.address->>'phone' ILIKE $${params.length} OR o.address->>'name' ILIKE $${params.length})`
+    const pg     = Math.max(1, parseInt(page)  || 1)
+    const lim    = Math.min(100, parseInt(limit) || 20)
+    const offset = (pg - 1) * lim
+
+    const filterParams = []
+    let where = `WHERE 1=1`
+
+    if (status) {
+      filterParams.push(status)
+      where += ` AND o.status=$${filterParams.length}`
     }
-    if (from_date) { params.push(from_date); sql += ` AND o.created_at >= $${params.length}::date` }
-    if (to_date)   { params.push(to_date);   sql += ` AND o.created_at <  ($${params.length}::date + interval '1 day')` }
-    const countSql = sql.replace('SELECT o.*, u.name as customer_name, u.phone as customer_phone', 'SELECT COUNT(*)')
-    sql += ` ORDER BY o.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`
-    params.push(limit, offset)
-    const { rows } = await query(sql, params)
-    const cnt = await query(countSql, params.slice(0, params.length - 2))
-    res.json({ orders: rows, total: parseInt(cnt.rows[0].count), page: parseInt(page) })
+    if (search) {
+      filterParams.push(`%${search}%`)
+      const p = filterParams.length
+      where += ` AND (
+        u.name           ILIKE $${p}
+        OR u.phone       ILIKE $${p}
+        OR u.email       ILIKE $${p}
+        OR o.reference_id ILIKE $${p}
+        OR o.address->>'phone' ILIKE $${p}
+        OR o.address->>'name'  ILIKE $${p}
+      )`
+    }
+    // IST-aware date range: cast stored UTC timestamptz → IST date, compare against input date string
+    if (from_date) {
+      filterParams.push(from_date)
+      where += ` AND (o.created_at AT TIME ZONE 'Asia/Kolkata')::date >= $${filterParams.length}::date`
+    }
+    if (to_date) {
+      filterParams.push(to_date)
+      where += ` AND (o.created_at AT TIME ZONE 'Asia/Kolkata')::date <= $${filterParams.length}::date`
+    }
+
+    const baseSql = `
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      ${where}
+    `
+
+    const countSql = `SELECT COUNT(*) ${baseSql}`
+    const dataSql  = `
+      SELECT o.*,
+             u.name  AS customer_name,
+             u.email AS customer_email,
+             u.phone AS customer_phone
+      ${baseSql}
+      ORDER BY o.created_at DESC
+      LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}
+    `
+
+    const [cntResult, dataResult] = await Promise.all([
+      query(countSql, filterParams),
+      query(dataSql,  [...filterParams, lim, offset]),
+    ])
+
+    res.json({
+      orders: dataResult.rows,
+      total:  parseInt(cntResult.rows[0].count),
+      page:   pg,
+      pages:  Math.ceil(parseInt(cntResult.rows[0].count) / lim),
+    })
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
