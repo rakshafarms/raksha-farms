@@ -35,48 +35,77 @@ const STATUS = {
 }
 
 // ─── sub-components ─────────────────────────────────────────────────────────
-function StatCard({ title, value, sub, icon, gradient, change }) {
-  const isNull   = change === null || change === undefined
-  const isUp     = change > 0
-  const isDown   = change < 0
-  const isFlat   = change === 0
+// theme = { card, border, iconBg, iconText, value, labelBg, labelText }
+function StatCard({ title, value, sub, icon, theme, change }) {
+  const isNull = change === null || change === undefined
+  const isUp   = change > 0
+  const isFlat = change === 0
 
   return (
-    <div className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-shadow">
-      {/* subtle gradient accent top */}
-      <div className={`absolute top-0 left-0 right-0 h-1 ${gradient}`}/>
-
-      <div className="flex items-start justify-between">
+    <div className={`relative rounded-2xl p-6 shadow-sm overflow-hidden hover:shadow-lg transition-all duration-200 border-l-4 ${theme.card} ${theme.border}`}>
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">{title}</p>
-          <p className="text-3xl font-extrabold text-gray-900 leading-none mt-1 truncate">{value}</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">{title}</p>
+          <p className={`text-4xl font-black leading-none truncate ${theme.value}`}>{value}</p>
 
           {/* delta badge */}
-          <div className="flex items-center gap-1.5 mt-3">
+          <div className="mt-3">
             {isNull || isFlat ? (
-              <span className="flex items-center gap-1 text-xs text-gray-400 font-medium">
-                <Minus size={12}/> Same as yesterday
+              <span className="inline-flex items-center gap-1 text-xs text-gray-400 font-medium bg-gray-100 px-2 py-1 rounded-full">
+                <Minus size={11}/> Same as yesterday
               </span>
             ) : isUp ? (
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                <TrendingUp size={12}/> +{change}% vs yesterday
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">
+                <TrendingUp size={11}/> +{change}% vs yesterday
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-                <TrendingDown size={12}/> {change}% vs yesterday
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                <TrendingDown size={11}/> {change}% vs yesterday
               </span>
             )}
           </div>
 
-          {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+          {sub && <p className="text-xs text-gray-400 mt-2">{sub}</p>}
         </div>
 
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ml-3 ${gradient} text-white shadow-sm`}>
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${theme.iconBg} ${theme.iconText} shadow-inner`}>
           {icon}
         </div>
       </div>
     </div>
   )
+}
+
+// Card themes — each one clearly distinct
+const THEMES = {
+  blue: {
+    card:     'bg-blue-50 border-gray-100',
+    border:   'border-l-blue-500',
+    iconBg:   'bg-blue-500',
+    iconText: 'text-white',
+    value:    'text-blue-700',
+  },
+  green: {
+    card:     'bg-emerald-50 border-gray-100',
+    border:   'border-l-emerald-600',
+    iconBg:   'bg-emerald-600',
+    iconText: 'text-white',
+    value:    'text-emerald-700',
+  },
+  purple: {
+    card:     'bg-purple-50 border-gray-100',
+    border:   'border-l-purple-600',
+    iconBg:   'bg-purple-600',
+    iconText: 'text-white',
+    value:    'text-purple-700',
+  },
+  orange: {
+    card:     'bg-orange-50 border-gray-100',
+    border:   'border-l-orange-500',
+    iconBg:   'bg-orange-500',
+    iconText: 'text-white',
+    value:    'text-orange-600',
+  },
 }
 
 function StatusBadge({ status }) {
@@ -169,7 +198,7 @@ export default function Dashboard() {
           value={fmt(kpis.todayOrders)}
           sub="Non-cancelled orders today"
           icon={<ShoppingCart size={24}/>}
-          gradient="bg-gradient-to-br from-blue-500 to-blue-600"
+          theme={THEMES.blue}
           change={kpis.ordersChange}
         />
         <StatCard
@@ -177,7 +206,7 @@ export default function Dashboard() {
           value={fmtRs(kpis.todayRevenue)}
           sub="All non-cancelled orders"
           icon={<IndianRupee size={24}/>}
-          gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
+          theme={THEMES.green}
           change={kpis.revenueChange}
         />
         <StatCard
@@ -185,7 +214,7 @@ export default function Dashboard() {
           value={fmt(kpis.todayCustomers)}
           sub="Unique buyers today"
           icon={<Users size={24}/>}
-          gradient="bg-gradient-to-br from-violet-500 to-violet-700"
+          theme={THEMES.purple}
           change={kpis.customersChange}
         />
         <StatCard
@@ -193,7 +222,7 @@ export default function Dashboard() {
           value={fmt(kpis.pendingOrders)}
           sub="Needs attention now"
           icon={<Clock size={24}/>}
-          gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+          theme={THEMES.orange}
           change={null}
         />
       </div>
