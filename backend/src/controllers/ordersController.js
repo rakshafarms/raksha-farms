@@ -324,6 +324,21 @@ export async function getOrder(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
+// Run a query inside a SAVEPOINT so a failure rolls back only that step,
+// not the whole transaction. Use this for non-critical side-effects like
+// stock updates and inventory logs where we never want to abort the transaction.
+async function safeQuery(client, sql, params) {
+  try {
+    await client.query('SAVEPOINT sq')
+    await client.query(sql, params)
+    await client.query('RELEASE SAVEPOINT sq')
+  } catch (e) {
+    // Roll back only this sub-step — the outer transaction stays alive
+    await client.query('ROLLBACK TO SAVEPOINT sq').catch(() => {})
+    console.warn('safeQuery skipped (non-fatal):', e.message)
+  }
+}
+
 export async function updateOrderStatus(req, res) {
   const client = await pool.connect()
   try {
@@ -334,7 +349,9 @@ export async function updateOrderStatus(req, res) {
     await client.query('BEGIN')
 
     // Lock the order row to prevent concurrent status updates
-    const { rows: existing } = await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [req.params.id])
+    const { rows: existing } = await client.query(
+      'SELECT * FROM orders WHERE id=$1 FOR UPDATE', [req.params.id]
+    )
     if (!existing[0]) {
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Order not found' })
@@ -342,7 +359,6 @@ export async function updateOrderStatus(req, res) {
 
     const ord = existing[0]
 
-    // Bug 5: Delivered orders are final — block any further status change
     if (ord.status === 'delivered') {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Delivered orders cannot be changed.' })
@@ -354,36 +370,32 @@ export async function updateOrderStatus(req, res) {
       catch { return [] }
     })()
 
-    // ── FIX BUG 5: Only restore stock for items NOT previously rejected ────────
     const prevRejectedIds = getPrevRejectedIds(ord)
 
-    let notesPayload = rejection_notes || ord.notes || ''
+    let notesPayload = ord.notes || ''
     let newTotal = null
 
+    // ── Handle partial / full rejection ────────────────────────────────────
     if (rejected_items?.length) {
       const enriched = rejected_items.map(ri => {
         const found = fullItems.find(fi => fi.id === ri.id || fi.name === ri.name)
         return {
-          id:       ri.id || found?.id,
-          name:     ri.name || found?.name,
+          id:       ri.id       || found?.id,
+          name:     ri.name     || found?.name,
           quantity: ri.quantity ?? found?.quantity ?? 1,
-          unit:     found?.unit || '',
+          unit:     found?.unit  || '',
           emoji:    found?.emoji || '',
           price:    found?.price ?? ri.price ?? 0,
         }
       })
 
-      const rejectedAmount = enriched.reduce((sum, ri) => sum + (ri.price * ri.quantity), 0)
+      const rejectedAmount = enriched.reduce((s, ri) => s + ri.price * ri.quantity, 0)
       const originalTotal  = Number(ord.total)
       const deliveryFee    = Number(ord.delivery_fee || 0)
       const allRejected    = enriched.length >= fullItems.length
-
-      const adjustedTotal = allRejected
-        ? 0
-        : Math.max(deliveryFee, originalTotal - rejectedAmount)
+      const adjustedTotal  = allRejected ? 0 : Math.max(deliveryFee, originalTotal - rejectedAmount)
 
       newTotal = adjustedTotal
-
       notesPayload = JSON.stringify({
         remarks:         rejection_notes || '',
         rejected_items:  enriched,
@@ -392,24 +404,25 @@ export async function updateOrderStatus(req, res) {
         adjusted_total:  adjustedTotal,
       })
 
-      // Restore stock only for items not already restored in a previous rejection
+      // Restore stock — use SAVEPOINT so a bad product id never aborts the tx
       for (const item of enriched) {
-        if (!item.id || prevRejectedIds.has(item.id)) continue   // already restored — skip
-        await client.query(
+        if (!item.id || prevRejectedIds.has(item.id)) continue
+        await safeQuery(client,
           `UPDATE products SET stock = stock + $1, updated_at = NOW() WHERE id = $2`,
           [item.quantity || 1, item.id]
-        ).catch(() => {})
-        await client.query(
+        )
+        await safeQuery(client,
           `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'rejection_restore')`,
           [item.id, item.quantity || 1]
-        ).catch(() => {})
+        )
       }
     }
 
+    // ── Build UPDATE statement ───────────────────────────────────────────────
     const updateFields = ['status=$1', 'updated_at=NOW()']
     const updateParams = [status]
 
-    if (notesPayload !== ord.notes) {
+    if (notesPayload !== (ord.notes || '')) {
       updateFields.push(`notes=$${updateParams.length + 1}`)
       updateParams.push(notesPayload)
     }
@@ -428,21 +441,21 @@ export async function updateOrderStatus(req, res) {
       updateParams
     )
 
-    // ── FIX BUG 6: Cancel only restores items not already restored by rejection ─
-    // Also never restore stock for delivered orders (items were already given to the customer)
-    if (status === 'cancelled' && ord.status !== 'rejected' && ord.status !== 'cancelled' && ord.status !== 'delivered') {
-      const updatedPrevRejectedIds = getPrevRejectedIds(ord) // use original ord (before this update)
+    // ── Customer cancellation: restore non-previously-rejected stock ─────────
+    if (
+      status === 'cancelled' &&
+      !['rejected','cancelled','delivered'].includes(ord.status)
+    ) {
       for (const item of fullItems) {
-        if (!item.id) continue
-        if (updatedPrevRejectedIds.has(item.id)) continue  // already restored at rejection time
-        await client.query(
+        if (!item.id || prevRejectedIds.has(item.id)) continue
+        await safeQuery(client,
           `UPDATE products SET stock = stock + $1, updated_at = NOW() WHERE id = $2`,
           [item.quantity || 1, item.id]
-        ).catch(() => {})
-        await client.query(
+        )
+        await safeQuery(client,
           `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'cancellation_restore')`,
           [item.id, item.quantity || 1]
-        ).catch(() => {})
+        )
       }
     }
 
@@ -450,6 +463,7 @@ export async function updateOrderStatus(req, res) {
     res.json(rows[0])
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
+    console.error('updateOrderStatus error:', err)
     res.status(500).json({ error: err.message })
   } finally {
     client.release()
