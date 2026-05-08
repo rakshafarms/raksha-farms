@@ -396,88 +396,134 @@ export default function CheckoutPage() {
           {/* ── STEP 1: Delivery Info ── */}
           {step === 1 && (
             <div className="card p-6 animate-slide-up">
-              {/* Delivery Frequency */}
+              {/* Order Type */}
               <div className="mb-6 pb-6 border-b border-gray-100">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">How often do you want this?</p>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {SUB_MODES.map(m => (
-                    <button key={m} type="button" onClick={() => setSubMode(m)}
-                      className={`py-2.5 rounded-2xl text-xs font-semibold border-2 transition-all ${
-                        subMode === m
-                          ? 'bg-forest-500 border-forest-500 text-white shadow-md'
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-forest-300'
-                      }`}>
-                      {m}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Order Type</p>
 
-                {/* Daily */}
-                {subMode === 'Daily' && (
-                  <div className="space-y-3">
-                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
-                    <SubQtyRow label="Quantity per delivery" qty={subQty} onChange={setSubQty}/>
+                {/* Buy Once — primary prominent option */}
+                <button type="button" onClick={() => setSubMode('Buy Once')}
+                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 mb-3 transition-all text-left ${
+                    subMode === 'Buy Once'
+                      ? 'border-forest-500 bg-forest-50 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}>
+                  <span className="text-3xl">🛒</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-900 text-sm">Buy Once</p>
+                    <p className="text-xs text-gray-500 mt-0.5">One-time delivery, no commitment</p>
                   </div>
-                )}
-
-                {/* Custom */}
-                {subMode === 'Custom' && (
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-gray-700">Quantity per day</p>
-                    <div className="grid grid-cols-7 gap-1">
-                      {DAYS.map(day => (
-                        <div key={day} className={`flex flex-col items-center rounded-xl border-2 overflow-hidden transition-all ${
-                          dayQty[day] > 0 ? 'border-forest-400 bg-forest-50' : 'border-gray-200 bg-gray-50'
-                        }`}>
-                          <button type="button" onClick={() => changeDayQty(day, 1)}
-                            className={`w-full py-2 text-base font-bold flex items-center justify-center ${
-                              dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-100' : 'text-gray-400 hover:bg-gray-100'
-                            }`}>+</button>
-                          <div className="w-full h-px bg-gray-200"/>
-                          <p className="text-sm font-extrabold text-gray-800 py-1.5">{dayQty[day]}</p>
-                          <p className={`text-[10px] font-bold mb-1 ${dayQty[day] > 0 ? 'text-forest-500' : 'text-gray-400'}`}>{day}</p>
-                          <div className="w-full h-px bg-gray-200"/>
-                          <button type="button" onClick={() => changeDayQty(day, -1)} disabled={dayQty[day] === 0}
-                            className={`w-full py-2 text-base font-bold flex items-center justify-center ${
-                              dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-100' : 'text-gray-300'
-                            }`}>−</button>
-                        </div>
-                      ))}
-                    </div>
-                    {customActiveDays > 0 && (
-                      <p className="text-xs text-forest-600 font-medium text-center">
-                        {customActiveDays} day{customActiveDays > 1 ? 's' : ''} per week · {DAYS.filter(d => dayQty[d] > 0).join(', ')}
-                      </p>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    subMode === 'Buy Once' ? 'border-forest-500 bg-forest-500' : 'border-gray-300'
+                  }`}>
+                    {subMode === 'Buy Once' && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
+                      </svg>
                     )}
-                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
                   </div>
-                )}
+                </button>
 
-                {/* On Interval */}
-                {subMode === 'On Interval' && (
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-gray-700">Repeat once every</p>
-                    <div className="flex flex-wrap gap-2">
-                      {INTERVALS.map(n => (
-                        <button key={n} type="button" onClick={() => setIntervalDays(n)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
-                            intervalDays === n
+                {/* Subscribe — secondary option */}
+                <button type="button" onClick={() => setSubMode(subMode === 'Buy Once' ? 'Daily' : subMode)}
+                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+                    subMode !== 'Buy Once'
+                      ? 'border-forest-500 bg-forest-50 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}>
+                  <span className="text-3xl">🔔</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-900 text-sm">Subscribe</p>
+                    <p className="text-xs text-green-600 font-medium mt-0.5">Set a recurring delivery schedule</p>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    subMode !== 'Buy Once' ? 'border-forest-500 bg-forest-500' : 'border-gray-300'
+                  }`}>
+                    {subMode !== 'Buy Once' && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
+                      </svg>
+                    )}
+                  </div>
+                </button>
+
+                {/* Subscription frequency — shown only when Subscribe is selected */}
+                {subMode !== 'Buy Once' && (
+                  <div className="mt-3 bg-gray-50 rounded-2xl p-4 space-y-4">
+                    {/* Frequency tabs */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {['Daily', 'Custom', 'On Interval'].map(m => (
+                        <button key={m} type="button" onClick={() => setSubMode(m)}
+                          className={`py-2 rounded-xl text-xs font-semibold border-2 transition-all ${
+                            subMode === m
                               ? 'bg-forest-500 border-forest-500 text-white shadow-sm'
-                              : 'bg-white border-forest-200 text-forest-600 hover:bg-forest-50'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-forest-300'
                           }`}>
-                          {n} days
+                          {m}
                         </button>
                       ))}
                     </div>
-                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
-                    <SubQtyRow label="Quantity" qty={subQty} onChange={setSubQty}/>
-                  </div>
-                )}
 
-                {/* Buy Once */}
-                {subMode === 'Buy Once' && (
-                  <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-500">
-                    🛒 A single order will be placed. No recurring deliveries.
+                    {/* Daily */}
+                    {subMode === 'Daily' && (
+                      <div className="space-y-3">
+                        <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                        <SubQtyRow label="Quantity per delivery" qty={subQty} onChange={setSubQty}/>
+                      </div>
+                    )}
+
+                    {/* Custom */}
+                    {subMode === 'Custom' && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Quantity per day</p>
+                        <div className="grid grid-cols-7 gap-1">
+                          {DAYS.map(day => (
+                            <div key={day} className={`flex flex-col items-center rounded-xl border-2 overflow-hidden transition-all ${
+                              dayQty[day] > 0 ? 'border-forest-400 bg-white' : 'border-gray-200 bg-white'
+                            }`}>
+                              <button type="button" onClick={() => changeDayQty(day, 1)}
+                                className={`w-full py-2 text-base font-bold flex items-center justify-center ${
+                                  dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-50' : 'text-gray-400 hover:bg-gray-100'
+                                }`}>+</button>
+                              <div className="w-full h-px bg-gray-200"/>
+                              <p className="text-sm font-extrabold text-gray-800 py-1.5">{dayQty[day]}</p>
+                              <p className={`text-[10px] font-bold mb-1 ${dayQty[day] > 0 ? 'text-forest-500' : 'text-gray-400'}`}>{day}</p>
+                              <div className="w-full h-px bg-gray-200"/>
+                              <button type="button" onClick={() => changeDayQty(day, -1)} disabled={dayQty[day] === 0}
+                                className={`w-full py-2 text-base font-bold flex items-center justify-center ${
+                                  dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-50' : 'text-gray-300'
+                                }`}>−</button>
+                            </div>
+                          ))}
+                        </div>
+                        {customActiveDays > 0 && (
+                          <p className="text-xs text-forest-600 font-medium text-center">
+                            {customActiveDays} day{customActiveDays > 1 ? 's' : ''} per week · {DAYS.filter(d => dayQty[d] > 0).join(', ')}
+                          </p>
+                        )}
+                        <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                      </div>
+                    )}
+
+                    {/* On Interval */}
+                    {subMode === 'On Interval' && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Repeat once every</p>
+                        <div className="flex flex-wrap gap-2">
+                          {INTERVALS.map(n => (
+                            <button key={n} type="button" onClick={() => setIntervalDays(n)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                                intervalDays === n
+                                  ? 'bg-forest-500 border-forest-500 text-white shadow-sm'
+                                  : 'bg-white border-forest-200 text-forest-600 hover:bg-forest-50'
+                              }`}>
+                              {n} days
+                            </button>
+                          ))}
+                        </div>
+                        <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                        <SubQtyRow label="Quantity" qty={subQty} onChange={setSubQty}/>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
