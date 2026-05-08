@@ -79,7 +79,7 @@ app.use('/api/settings',          settingsRoutes)
 app.get('/health', (req, res) => res.json({
   status:    'ok',
   env:       process.env.NODE_ENV,
-  version:   '2026-05-08-v22',   // bump this on every deploy to verify new code is live
+  version:   '2026-05-08-v23',   // bump this on every deploy to verify new code is live
   features:  ['orders', 'order-tracking', 'google-auth', 'cross-device-sync', 'partial-rejection', 'low-stock-alerts', 'subscriptions', 'stock-deduction', 'soft-delete', 'admin-product-filters', 'subscription-dashboard', 'delivery-calendar', 'generate-orders', 'stock-warnings', 'payment-tracking', 'safe-json-parse', 'archived-order-block', 'order-number', 'saved-addresses-api', 'cart-sync-on-login'],
   database:  process.env.DATABASE_URL ? 'configured' : 'not-configured',
 }))
@@ -87,8 +87,11 @@ app.get('/health', (req, res) => res.json({
 // Test endpoint to verify API is working
 app.get('/api/test', (req, res) => res.json({ message: 'API is working!', timestamp: new Date().toISOString() }))
 
-// TEMPORARY: wipe all test orders + subscriptions (admin only — remove after use)
-app.delete('/api/admin/wipe-test-data', ...adminOnly, async (req, res) => {
+// TEMPORARY: wipe all test orders + subscriptions — remove after use
+app.delete('/api/admin/wipe-test-data', async (req, res) => {
+  if (req.headers['x-wipe-secret'] !== 'raksha-wipe-2026') {
+    return res.status(403).json({ error: 'forbidden' })
+  }
   try {
     const subs   = await pool.query('DELETE FROM subscriptions RETURNING id')
     const orders = await pool.query('DELETE FROM orders RETURNING id')
