@@ -7,7 +7,6 @@ import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import { DELIVERY_SLOTS, OWNER_UPI_ID, calcDelivery, FREE_DELIVERY_THRESHOLD, generateOrderId } from '../utils/constants'
 import { useAddresses } from '../context/AddressContext'
-import { useSubscriptions } from '../context/SubscriptionContext'
 
 const STEPS = [
   { id: 1, label: 'Delivery'  },
@@ -20,6 +19,19 @@ const PHONE_RE   = /^[6-9]\d{9}$/
 const PINCODE_RE = /^\d{6}$/
 const DIGIT_RE   = /\D/g
 
+const SUB_MODES = ['Daily', 'Custom', 'On Interval', 'Buy Once']
+const DAYS      = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const INTERVALS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30]
+
+function tomorrow() {
+  const d = new Date(); d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
+function fmtDate(iso) {
+  if (!iso) return ''
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 export default function CheckoutPage() {
   const { cart, totalPrice, clearCart, closeDrawer } = useCart()
   const { addOrder }    = useOrders()
@@ -28,13 +40,18 @@ export default function CheckoutPage() {
   const { addToast }    = useToast()
   const navigate        = useNavigate()
   const { addresses, addAddress, deleteAddress, LABEL_ICONS } = useAddresses()
-  const { plans: subscriptionPlans } = useSubscriptions()
   const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
   const [step, setStep]   = useState(1)
-  const [orderType, setOrderType] = useState('onetime') // 'onetime' or 'subscription'
-  const [selectedPlan, setSelectedPlan] = useState(null)
+  // Subscription frequency mode — 'Buy Once' = regular one-time order
+  const [subMode, setSubMode]           = useState('Buy Once')
+  const [intervalDays, setIntervalDays] = useState(2)
+  const [dayQty, setDayQty]             = useState(Object.fromEntries(DAYS.map(d => [d, 1])))
+  const [subStartDate, setSubStartDate] = useState(tomorrow())
+  const [subQty, setSubQty]             = useState(1)
   const [placing, setPlacing] = useState(false)
+
+  const orderType = subMode === 'Buy Once' ? 'onetime' : 'subscription'
 
   // Step 1 form — pre-fill from user profile only (address filled from DB addresses below)
   const [form, setForm] = useState({
@@ -104,12 +121,8 @@ export default function CheckoutPage() {
 
   const activeSlot    = DELIVERY_SLOTS.find((s) => s.id === selectedSlot)
   const slotFee       = calcDelivery(totalPrice, activeSlot?.id)
-  // Bug 2: apply subscription plan discount to subtotal before adding delivery fee
-  const subscriptionDiscount = orderType === 'subscription' && selectedPlan?.discount_percent > 0
-    ? Math.round(totalPrice * selectedPlan.discount_percent / 100)
-    : 0
   const couponDiscount = couponApplied ? couponApplied.discount : 0
-  const finalTotal    = Math.max(0, totalPrice - subscriptionDiscount - couponDiscount + slotFee)
+  const finalTotal    = Math.max(0, totalPrice - couponDiscount + slotFee)
 
   async function validateAndApplyCoupon(code) {
     const trimmed = (code || '').trim().toUpperCase()
@@ -200,18 +213,52 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const changeDayQty = (day, delta) =>
+    setDayQty(p => ({ ...p, [day]: Math.max(0, (p[day] || 0) + delta) }))
+
+  const customActiveDays = DAYS.filter(d => dayQty[d] > 0).length
+
   async function handlePlaceOrder() {
-    // Bug 1: Subscription requires login + a selected plan
-    if (orderType === 'subscription') {
-      if (!user) {
-        addToast('Please log in to place a subscription order', 'error', 5000)
-        return
-      }
-      if (!selectedPlan) {
-        addToast('Please select a subscription plan to continue', 'error', 5000)
-        return
-      }
+    if (orderType === 'subscription' && !user) {
+      addToast('Please log in to place a subscription order', 'error', 5000)
+      return
     }
+    if (subMode === 'Custom' && customActiveDays === 0) {
+      addToast('Please select at least one day for your custom schedule', 'error', 5000)
+      return
+    }
+
+    // Subscription path — create via subscriptions API
+    if (orderType === 'subscription') {
+      setPlacing(true)
+      const items = cart.map(item => ({
+        id: item.id, name: item.name, price: item.price,
+        unit: item.unit, emoji: item.emoji || '🌿', quantity: item.quantity,
+      }))
+      const frequency = subMode === 'Daily' ? 'daily'
+        : subMode === 'On Interval' ? `interval_${intervalDays}`
+        : 'custom'
+      const custom_schedule = subMode === 'Custom' ? dayQty : null
+      const address = `${form.address.trim()}, ${form.city.trim()} — ${form.pincode.trim()}`
+      try {
+        const token = localStorage.getItem('auth_token')
+        const res = await fetch(`${BACKEND_URL}/api/subscriptions/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ items, frequency, start_date: subStartDate, address, custom_schedule }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed')
+        clearCart()
+        addToast('Subscription created! 🎉', 'success', 5000)
+        navigate('/')
+      } catch (e) {
+        addToast(`❌ ${e.message || 'Subscription failed. Please try again.'}`, 'error', 7000)
+      } finally {
+        setPlacing(false)
+      }
+      return
+    }
+
     // Stock validation before placing
     const outOfStock = cart.filter(item => item.stock === 0 || item.quantity > item.stock)
     if (outOfStock.length) {
@@ -259,7 +306,7 @@ export default function CheckoutPage() {
       const backendRes = await fetch(`${BACKEND_URL}/api/orders`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ customer, items, subtotal: totalPrice - subscriptionDiscount - couponDiscount, deliveryFee: slotFee, total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label, referenceId: orderId, subscription_plan_id: orderType === 'subscription' && selectedPlan ? selectedPlan.id : null, coupon_code: couponApplied?.code || null }),
+        body: JSON.stringify({ customer, items, subtotal: totalPrice - couponDiscount, deliveryFee: slotFee, total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label, referenceId: orderId, coupon_code: couponApplied?.code || null }),
       })
       if (backendRes.ok) {
         const data = await backendRes.json()
@@ -349,77 +396,91 @@ export default function CheckoutPage() {
           {/* ── STEP 1: Delivery Info ── */}
           {step === 1 && (
             <div className="card p-6 animate-slide-up">
-              {/* Order Type Selection */}
-              {subscriptionPlans.length > 0 && (
-                <div className="mb-6 pb-6 border-b border-gray-100">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Order Type</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderType('onetime')
-                        setSelectedPlan(null)
-                      }}
-                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                        orderType === 'onetime'
-                          ? 'border-forest-500 bg-forest-50'
-                          : 'border-gray-100 hover:border-gray-200 bg-white'
-                      }`}
-                    >
-                      <span className="text-2xl">🛒</span>
-                      <div className="text-left">
-                        <p className="text-sm font-semibold text-gray-800">One-Time Order</p>
-                        <p className="text-xs text-gray-500">Deliver once</p>
-                      </div>
+              {/* Delivery Frequency */}
+              <div className="mb-6 pb-6 border-b border-gray-100">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">How often do you want this?</p>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {SUB_MODES.map(m => (
+                    <button key={m} type="button" onClick={() => setSubMode(m)}
+                      className={`py-2.5 rounded-2xl text-xs font-semibold border-2 transition-all ${
+                        subMode === m
+                          ? 'bg-forest-500 border-forest-500 text-white shadow-md'
+                          : 'bg-white border-gray-200 text-gray-700 hover:border-forest-300'
+                      }`}>
+                      {m}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderType('subscription')}
-                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                        orderType === 'subscription'
-                          ? 'border-forest-500 bg-forest-50'
-                          : 'border-gray-100 hover:border-gray-200 bg-white'
-                      }`}
-                    >
-                      <span className="text-2xl">🔄</span>
-                      <div className="text-left">
-                        <p className="text-sm font-semibold text-gray-800">Subscribe</p>
-                        <p className="text-xs text-gray-500 text-forest-600">Save 5-15%</p>
-                      </div>
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              )}
 
-              {/* Subscription Plans Selection */}
-              {orderType === 'subscription' && subscriptionPlans.length > 0 && (
-                <div className="mb-6 pb-6 border-b border-gray-100">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Choose Plan</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {subscriptionPlans.map(plan => (
-                      <button
-                        key={plan.id}
-                        type="button"
-                        onClick={() => setSelectedPlan(plan)}
-                        className={`p-4 rounded-xl border-2 transition-all text-left ${
-                          selectedPlan?.id === plan.id
-                            ? 'border-forest-500 bg-forest-50 shadow-sm'
-                            : 'border-gray-200 hover:border-forest-200 bg-white'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <p className="font-semibold text-gray-900 text-sm">{plan.name}</p>
-                          {plan.discount_percent > 0 && (
-                            <span className="badge bg-green-100 text-green-700 text-[10px] font-bold">Save {plan.discount_percent}%</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 capitalize mb-2">{plan.frequency}</p>
-                        {plan.description && <p className="text-xs text-gray-600">{plan.description}</p>}
-                      </button>
-                    ))}
+                {/* Daily */}
+                {subMode === 'Daily' && (
+                  <div className="space-y-3">
+                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                    <SubQtyRow label="Quantity per delivery" qty={subQty} onChange={setSubQty}/>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* Custom */}
+                {subMode === 'Custom' && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-gray-700">Quantity per day</p>
+                    <div className="grid grid-cols-7 gap-1">
+                      {DAYS.map(day => (
+                        <div key={day} className={`flex flex-col items-center rounded-xl border-2 overflow-hidden transition-all ${
+                          dayQty[day] > 0 ? 'border-forest-400 bg-forest-50' : 'border-gray-200 bg-gray-50'
+                        }`}>
+                          <button type="button" onClick={() => changeDayQty(day, 1)}
+                            className={`w-full py-2 text-base font-bold flex items-center justify-center ${
+                              dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-100' : 'text-gray-400 hover:bg-gray-100'
+                            }`}>+</button>
+                          <div className="w-full h-px bg-gray-200"/>
+                          <p className="text-sm font-extrabold text-gray-800 py-1.5">{dayQty[day]}</p>
+                          <p className={`text-[10px] font-bold mb-1 ${dayQty[day] > 0 ? 'text-forest-500' : 'text-gray-400'}`}>{day}</p>
+                          <div className="w-full h-px bg-gray-200"/>
+                          <button type="button" onClick={() => changeDayQty(day, -1)} disabled={dayQty[day] === 0}
+                            className={`w-full py-2 text-base font-bold flex items-center justify-center ${
+                              dayQty[day] > 0 ? 'text-forest-600 hover:bg-forest-100' : 'text-gray-300'
+                            }`}>−</button>
+                        </div>
+                      ))}
+                    </div>
+                    {customActiveDays > 0 && (
+                      <p className="text-xs text-forest-600 font-medium text-center">
+                        {customActiveDays} day{customActiveDays > 1 ? 's' : ''} per week · {DAYS.filter(d => dayQty[d] > 0).join(', ')}
+                      </p>
+                    )}
+                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                  </div>
+                )}
+
+                {/* On Interval */}
+                {subMode === 'On Interval' && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-gray-700">Repeat once every</p>
+                    <div className="flex flex-wrap gap-2">
+                      {INTERVALS.map(n => (
+                        <button key={n} type="button" onClick={() => setIntervalDays(n)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                            intervalDays === n
+                              ? 'bg-forest-500 border-forest-500 text-white shadow-sm'
+                              : 'bg-white border-forest-200 text-forest-600 hover:bg-forest-50'
+                          }`}>
+                          {n} days
+                        </button>
+                      ))}
+                    </div>
+                    <SubDateRow label="Start Date" value={subStartDate} onChange={setSubStartDate}/>
+                    <SubQtyRow label="Quantity" qty={subQty} onChange={setSubQty}/>
+                  </div>
+                )}
+
+                {/* Buy Once */}
+                {subMode === 'Buy Once' && (
+                  <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-500">
+                    🛒 A single order will be placed. No recurring deliveries.
+                  </div>
+                )}
+              </div>
 
               <h2 className="font-bold text-gray-800 text-lg mb-5 flex items-center gap-2">
                 <svg className="w-5 h-5 text-forest-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -809,12 +870,6 @@ export default function CheckoutPage() {
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal</span><span>₹{totalPrice}</span>
               </div>
-              {subscriptionDiscount > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Plan discount ({selectedPlan.discount_percent}%)</span>
-                  <span>−₹{subscriptionDiscount}</span>
-                </div>
-              )}
               {couponDiscount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Coupon ({couponApplied.code})</span>
@@ -845,6 +900,37 @@ export default function CheckoutPage() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Subscription helpers ── */
+function SubDateRow({ label, value, onChange }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400 font-medium mb-1.5">{label}</p>
+      <label className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 cursor-pointer hover:border-forest-300 transition-colors">
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span className="text-gray-700 font-medium text-sm flex-1">{value ? fmtDate(value) : 'Select date'}</span>
+        <input type="date" value={value} min={tomorrow()} onChange={e => onChange(e.target.value)} className="absolute opacity-0 w-0 h-0"/>
+      </label>
+    </div>
+  )
+}
+
+function SubQtyRow({ label, qty, onChange }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400 font-medium mb-1.5">{label}</p>
+      <div className="flex items-center gap-0 w-fit">
+        <button type="button" onClick={() => onChange(Math.max(1, qty - 1))}
+          className="w-10 h-10 rounded-l-xl bg-forest-500 hover:bg-forest-600 text-white font-bold text-xl flex items-center justify-center transition-colors">−</button>
+        <span className="w-10 h-10 flex items-center justify-center font-extrabold text-base text-gray-900 bg-white border-y border-gray-200">{qty}</span>
+        <button type="button" onClick={() => onChange(qty + 1)}
+          className="w-10 h-10 rounded-r-xl bg-forest-500 hover:bg-forest-600 text-white font-bold text-xl flex items-center justify-center transition-colors">+</button>
       </div>
     </div>
   )
