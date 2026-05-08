@@ -224,7 +224,7 @@ function DetailDrawer({ subId, onClose, onRefresh }) {
         ) : !detail ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Subscription not found</div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4">
 
             {/* ── Contact ── */}
             <section>
