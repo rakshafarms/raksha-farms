@@ -231,6 +231,17 @@ export async function initDb() {
     // Widen frequency column to support 'bi-weekly' etc
     await query(`ALTER TABLE subscriptions ALTER COLUMN frequency TYPE VARCHAR(30)`).catch(() => {})
 
+    // Fix frequency check constraint — old constraint only allowed daily/weekly/monthly.
+    // New system uses: daily, custom, once, interval_N (e.g. interval_5), plus legacy weekly/bi-weekly/monthly.
+    await query(`ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_frequency_check`).catch(() => {})
+    await query(`
+      ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_frequency_check
+        CHECK (
+          frequency IN ('daily','weekly','bi-weekly','monthly','custom','once')
+          OR frequency LIKE 'interval_%'
+        )
+    `).catch(() => {})
+
     // ── Bug 4 fix: UNIQUE guard so generateOrders is idempotent ──────────────
     await query(`
       ALTER TABLE subscription_deliveries
