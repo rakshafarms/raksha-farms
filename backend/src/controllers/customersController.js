@@ -31,7 +31,7 @@ export async function getCustomers(req, res) {
         ORDER BY u.created_at DESC
         LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}
       `, [...filterParams, lim, offset]),
-      query(`SELECT COUNT(*) FROM users ${where}`, filterParams),
+      query(`SELECT COUNT(*) FROM users u ${where}`, filterParams),
       query(`SELECT
                COUNT(*) AS total,
                COUNT(*) FILTER (WHERE is_active = true)  AS active,
