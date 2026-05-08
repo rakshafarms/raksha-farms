@@ -39,9 +39,12 @@ function addDays(n) {
 
 function fmtFrequency(freq) {
   if (!freq) return '—'
-  if (freq === 'daily')  return 'Daily'
-  if (freq === 'custom') return 'Custom'
-  if (freq === 'once')   return 'One-time'
+  if (freq === 'daily')      return 'Daily'
+  if (freq === 'custom')     return 'Custom'
+  if (freq === 'once')       return 'One-time'
+  if (freq === 'weekly')     return 'Every 7 days'
+  if (freq === 'bi-weekly')  return 'Every 14 days'
+  if (freq === 'monthly')    return 'Every 30 days'
   const m = freq.match(/^interval_(\d+)$/)
   if (m) return `Every ${m[1]} days`
   return freq
@@ -82,12 +85,17 @@ function PayBadge({ status }) {
   return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.cls}`}>{p.label}</span>
 }
 
+const INTERVAL_FREQS = ['weekly', 'bi-weekly', 'monthly']
+function isIntervalFreq(freq) {
+  return freq?.startsWith('interval_') || INTERVAL_FREQS.includes(freq)
+}
+
 function FreqBadge({ freq }) {
   const text = fmtFrequency(freq)
-  const cls = freq === 'daily'              ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-              freq === 'custom'             ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-              freq === 'once'               ? 'bg-gray-100 text-gray-500' :
-              freq?.startsWith('interval_') ? 'bg-orange-50 text-orange-700 border border-orange-100' :
+  const cls = freq === 'daily'   ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+              freq === 'custom'  ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+              freq === 'once'    ? 'bg-gray-100 text-gray-500' :
+              isIntervalFreq(freq) ? 'bg-orange-50 text-orange-700 border border-orange-100' :
               'bg-gray-100 text-gray-500'
   return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{text}</span>
 }

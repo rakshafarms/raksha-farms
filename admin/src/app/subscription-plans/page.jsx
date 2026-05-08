@@ -11,9 +11,12 @@ import {
 
 function fmtFrequency(freq) {
   if (!freq) return '—'
-  if (freq === 'daily')  return 'Daily'
-  if (freq === 'custom') return 'Custom Schedule'
-  if (freq === 'once')   return 'One-time'
+  if (freq === 'daily')      return 'Daily'
+  if (freq === 'custom')     return 'Custom Schedule'
+  if (freq === 'once')       return 'One-time'
+  if (freq === 'weekly')     return 'Every 7 days'
+  if (freq === 'bi-weekly')  return 'Every 14 days'
+  if (freq === 'monthly')    return 'Every 30 days'
   const m = freq.match(/^interval_(\d+)$/)
   if (m) return `Every ${m[1]} days`
   return freq
@@ -44,11 +47,12 @@ const AVATAR_COLORS = [
 ]
 const avatarColor = (name = '') => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]
 
-// Canonical ordering for frequency types
-const FREQ_ORDER = ['daily', 'custom', 'once']
 function freqSortKey(freq) {
-  if (freq === 'daily')  return 0
-  if (freq === 'custom') return 1
+  if (freq === 'daily')      return 0
+  if (freq === 'custom')     return 1
+  if (freq === 'weekly')     return 17
+  if (freq === 'bi-weekly')  return 24
+  if (freq === 'monthly')    return 40
   if (freq?.startsWith('interval_')) {
     const n = parseInt(freq.split('_')[1]) || 99
     return 10 + n
@@ -58,21 +62,26 @@ function freqSortKey(freq) {
 }
 
 // ── Frequency badge ───────────────────────────────────────────────────────────
+const INTERVAL_FREQS = ['weekly', 'bi-weekly', 'monthly']
+function isIntervalFreq(freq) {
+  return freq?.startsWith('interval_') || INTERVAL_FREQS.includes(freq)
+}
+
 function FreqBadge({ freq }) {
-  const cls = freq === 'daily'              ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-              freq === 'custom'             ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-              freq === 'once'               ? 'bg-gray-100 text-gray-500' :
-              freq?.startsWith('interval_') ? 'bg-orange-50 text-orange-700 border border-orange-100' :
+  const cls = freq === 'daily'  ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+              freq === 'custom' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+              freq === 'once'   ? 'bg-gray-100 text-gray-500' :
+              isIntervalFreq(freq) ? 'bg-orange-50 text-orange-700 border border-orange-100' :
               'bg-gray-100 text-gray-500'
   return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{fmtFrequency(freq)}</span>
 }
 
 // ── Frequency icon ────────────────────────────────────────────────────────────
 function freqIcon(freq) {
-  if (freq === 'daily')              return { icon: '🔁', bg: 'bg-blue-100',   text: 'text-blue-700' }
-  if (freq === 'custom')             return { icon: '📅', bg: 'bg-purple-100', text: 'text-purple-700' }
-  if (freq === 'once')               return { icon: '🛒', bg: 'bg-gray-100',   text: 'text-gray-600' }
-  if (freq?.startsWith('interval_')) return { icon: '⏱', bg: 'bg-orange-100', text: 'text-orange-700' }
+  if (freq === 'daily')    return { icon: '🔁', bg: 'bg-blue-100',   text: 'text-blue-700' }
+  if (freq === 'custom')   return { icon: '📅', bg: 'bg-purple-100', text: 'text-purple-700' }
+  if (freq === 'once')     return { icon: '🛒', bg: 'bg-gray-100',   text: 'text-gray-600' }
+  if (isIntervalFreq(freq)) return { icon: '⏱', bg: 'bg-orange-100', text: 'text-orange-700' }
   return { icon: '📦', bg: 'bg-gray-100', text: 'text-gray-600' }
 }
 
