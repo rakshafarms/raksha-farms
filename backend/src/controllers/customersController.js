@@ -2,25 +2,49 @@ import { query } from '../config/database.js'
 
 export async function getCustomers(req, res) {
   try {
-    const { search, page = 1, limit = 20 } = req.query
-    const offset = (page - 1) * limit
-    let sql = `
-      SELECT u.id, u.name, u.email, u.phone, u.is_active, u.created_at,
-             COUNT(o.id) AS total_orders,
-             COALESCE(SUM(o.total),0) AS total_spent
-      FROM users u
-      LEFT JOIN orders o ON o.user_id = u.id AND o.status = 'delivered'
-      WHERE u.role = 'user'`
-    const params = []
+    const { search, status, page = 1, limit = 20 } = req.query
+    const pg     = Math.max(1, parseInt(page) || 1)
+    const lim    = Math.min(100, parseInt(limit) || 20)
+    const offset = (pg - 1) * lim
+
+    const filterParams = []
+    let where = `WHERE u.role = 'user'`
+
     if (search) {
-      params.push(`%${search}%`)
-      sql += ` AND (u.name ILIKE $1 OR u.email ILIKE $1 OR u.phone ILIKE $1)`
+      filterParams.push(`%${search}%`)
+      where += ` AND (u.name ILIKE $${filterParams.length} OR u.email ILIKE $${filterParams.length} OR u.phone ILIKE $${filterParams.length})`
     }
-    sql += ` GROUP BY u.id ORDER BY u.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`
-    params.push(limit, offset)
-    const { rows } = await query(sql, params)
-    const cnt = await query(`SELECT COUNT(*) FROM users WHERE role='user'`)
-    res.json({ customers: rows, total: parseInt(cnt.rows[0].count) })
+    if (status === 'active')  where += ` AND u.is_active = true`
+    if (status === 'blocked') where += ` AND u.is_active = false`
+
+    const [rows, cnt, stats] = await Promise.all([
+      query(`
+        SELECT u.id, u.name, u.email, u.phone, u.is_active, u.created_at,
+               COUNT(o.id)                                     AS total_orders,
+               COALESCE(SUM(CASE WHEN o.status NOT IN ('cancelled','rejected') THEN o.total ELSE 0 END), 0) AS total_spent,
+               MAX(o.created_at)                               AS last_order_at,
+               COUNT(CASE WHEN o.status = 'delivered' THEN 1 END) AS delivered_orders
+        FROM users u
+        LEFT JOIN orders o ON o.user_id = u.id
+        ${where}
+        GROUP BY u.id
+        ORDER BY u.created_at DESC
+        LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}
+      `, [...filterParams, lim, offset]),
+      query(`SELECT COUNT(*) FROM users ${where}`, filterParams),
+      query(`SELECT
+               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE is_active = true)  AS active,
+               COUNT(*) FILTER (WHERE is_active = false) AS blocked
+             FROM users WHERE role='user'`),
+    ])
+
+    res.json({
+      customers: rows.rows,
+      total:  parseInt(cnt.rows[0].count),
+      pages:  Math.ceil(parseInt(cnt.rows[0].count) / lim),
+      stats:  stats.rows[0],
+    })
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
