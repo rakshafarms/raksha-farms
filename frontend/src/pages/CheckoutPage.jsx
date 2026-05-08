@@ -242,12 +242,22 @@ export default function CheckoutPage() {
       const address = `${form.address.trim()}, ${form.city.trim()} — ${form.pincode.trim()}`
       try {
         const token = localStorage.getItem('auth_token')
-        const res = await fetch(`${BACKEND_URL}/api/subscriptions/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ items, frequency, start_date: subStartDate, address, custom_schedule }),
-        })
-        if (!res.ok) throw new Error((await res.json()).error || 'Failed')
+        let res
+        try {
+          res = await fetch(`${BACKEND_URL}/api/subscriptions/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ items, frequency, start_date: subStartDate, address, custom_schedule }),
+          })
+        } catch {
+          addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
+          setPlacing(false)
+          return
+        }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || `Server error (${res.status})`)
+        }
         clearCart()
         addToast('Subscription created! 🎉', 'success', 5000)
         navigate('/')
