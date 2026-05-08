@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, categoriesAPI } from '../../lib/api'
 import { Plus, Pencil, Archive, Search, X, RotateCcw, Package } from 'lucide-react'
@@ -33,39 +33,35 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES)
+  const prevSearch = useRef('')
 
-  async function load() {
-    setLoading(true)
-    try {
-      const params = { limit: 200 }
-      if (search)         params.search   = search
-      if (statusFilter)   params.status   = statusFilter
-      if (categoryFilter) params.category = categoryFilter
-      const { data } = await productsAPI.getAllAdmin(params)
-      setProducts(data.products || [])
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
-  }
-
+  // Single effect: debounce 300ms for search typing, immediate for filter changes
   useEffect(() => {
-    load()
+    const delay = search !== prevSearch.current ? 300 : 0
+    prevSearch.current = search
+    const t = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const params = { limit: 200 }
+        if (search)         params.search   = search
+        if (statusFilter)   params.status   = statusFilter
+        if (categoryFilter) params.category = categoryFilter
+        const { data } = await productsAPI.getAllAdmin(params)
+        setProducts(data.products || [])
+      } catch(e) { console.error(e) }
+      finally { setLoading(false) }
+    }, delay)
+    return () => clearTimeout(t)
+  }, [search, statusFilter, categoryFilter])
+
+  // Load categories once
+  useEffect(() => {
     categoriesAPI.getAll()
       .then(({ data }) => {
-        if (data?.length > 0) {
-          setCategories(data.map(c => ({ slug: c.slug, name: c.name })))
-        }
+        if (data?.length > 0) setCategories(data.map(c => ({ slug: c.slug, name: c.name })))
       })
       .catch(() => {})
   }, [])
-
-  // Re-fetch when status/category filter changes immediately
-  useEffect(() => { load() }, [statusFilter, categoryFilter])
-
-  // Re-fetch when search changes — debounced 350ms so we don't fire on every keystroke
-  useEffect(() => {
-    const t = setTimeout(() => load(), 350)
-    return () => clearTimeout(t)
-  }, [search])
 
   function openAdd() {
     setEditing(null)
