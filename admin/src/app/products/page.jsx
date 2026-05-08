@@ -58,8 +58,14 @@ export default function ProductsPage() {
       .catch(() => {})
   }, [])
 
-  // Re-fetch when filters change
+  // Re-fetch when status/category filter changes immediately
   useEffect(() => { load() }, [statusFilter, categoryFilter])
+
+  // Re-fetch when search changes — debounced 350ms so we don't fire on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => load(), 350)
+    return () => clearTimeout(t)
+  }, [search])
 
   function openAdd() {
     setEditing(null)
@@ -130,7 +136,6 @@ export default function ProductsPage() {
         <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 flex-1 min-w-48">
           <Search size={16} className="text-gray-400"/>
           <input value={search} onChange={e=>setSearch(e.target.value)}
-            onKeyDown={e=>e.key==='Enter' && load()}
             placeholder="Search products…" className="outline-none text-sm flex-1"/>
           {search && <button onClick={()=>{ setSearch(''); setTimeout(load,0) }}><X size={14} className="text-gray-400"/></button>}
         </div>
