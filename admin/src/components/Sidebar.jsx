@@ -24,7 +24,7 @@ const nav = [
 export default function Sidebar({ mobileOpen = true, onClose }) {
   const path = usePathname()
   function logout() {
-    if (!window.confirm('Sign out of the admin panel?')) return
+    if (!window.confirm('Are you sure you want to sign out?')) return
     Cookies.remove('admin_token')
     localStorage.removeItem('admin_token')
     window.location.href = '/login'
