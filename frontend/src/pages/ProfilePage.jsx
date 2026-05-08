@@ -186,14 +186,16 @@ export default function ProfilePage() {
             <span className="text-xs text-gray-400">Member since {user?.createdAt ? new Date(user.createdAt).getFullYear() : '2024'}</span>
           </div>
         </div>
-        <button onClick={() => { logout(); navigate('/') }}
+        <button onClick={() => {
+            if (window.confirm('Sign out of your account?')) { logout(); navigate('/') }
+          }}
           className="text-sm text-red-400 hover:text-red-600 font-medium border border-red-100 hover:border-red-300 px-4 py-2 rounded-xl transition-all flex-shrink-0">
           Sign Out
         </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
         <StatBox value={orders.length}     label="Orders"    color="text-forest-500" />
         <StatBox value={activeSubs}        label="Active Subs" color="text-blue-600" />
         <StatBox value={`₹${totalSpent}`} label="Spent"      color="text-earth-600" />
@@ -490,9 +492,9 @@ function SubCard({ sub, busySub, onToggle, onCancel }) {
 
 function StatBox({ value, label, color }) {
   return (
-    <div className="card p-4 text-center">
-      <p className={`text-xl font-black ${color}`}>{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5 font-medium">{label}</p>
+    <div className="card p-3 sm:p-4 text-center">
+      <p className={`text-lg sm:text-xl font-black ${color} truncate`}>{value}</p>
+      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium leading-tight">{label}</p>
     </div>
   )
 }

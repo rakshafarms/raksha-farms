@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [tab, setTab] = useState('login')
   const [form, setForm] = useState(() => {
     const saved = localStorage.getItem('rf_remember_email') || ''
-    return { name: '', emailOrPhone: saved, email: '', phone: '', password: '', confirm: '' }
+    return { name: '', email: saved, emailOrPhone: saved, phone: '', password: '', confirm: '' }
   })
   const [rememberMe, setRememberMe] = useState(!!localStorage.getItem('rf_remember_email'))
   const [errors, setErrors] = useState({})
@@ -44,13 +44,9 @@ export default function LoginPage() {
 
   function validateLogin() {
     const errs = {}
-    const id = form.emailOrPhone.trim()
-    if (!id) errs.emailOrPhone = 'Email or mobile number is required'
-    else {
-      const isPhone = /^[+\d]/.test(id) && !id.includes('@')
-      if (!isPhone && !/\S+@\S+\.\S+/.test(id)) errs.emailOrPhone = 'Enter a valid email or 10-digit mobile number'
-      if (isPhone && id.replace(/\D/g, '').length < 10) errs.emailOrPhone = 'Enter a valid 10-digit mobile number'
-    }
+    const id = form.email.trim()
+    if (!id) errs.email = 'Email is required'
+    else if (!/\S+@\S+\.\S+/.test(id)) errs.email = 'Enter a valid email address'
     if (!form.password) errs.password = 'Password is required'
     return errs
   }
@@ -75,9 +71,8 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       if (tab === 'login') {
-        await loginWithEmail(form.emailOrPhone.trim(), form.password)
-        // Save email for remember me
-        if (rememberMe) localStorage.setItem('rf_remember_email', form.emailOrPhone.trim())
+        await loginWithEmail(form.email.trim(), form.password)
+        if (rememberMe) localStorage.setItem('rf_remember_email', form.email.trim())
         else localStorage.removeItem('rf_remember_email')
         addToast('Welcome back! 🌿', 'success')
       } else {
@@ -178,38 +173,15 @@ export default function LoginPage() {
               />
             )}
 
-            {tab === 'login' ? (
-              <AuthField
-                label="Email or Mobile Number"
-                type="text"
-                placeholder="you@example.com  or  9876543210"
-                value={form.emailOrPhone}
-                onChange={(v) => update('emailOrPhone', v)}
-                error={errors.emailOrPhone}
-                icon="📱"
-              />
-            ) : (
-              <>
-                <AuthField
-                  label="Email Address"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={form.email}
-                  onChange={(v) => update('email', v)}
-                  error={errors.email}
-                  icon="📧"
-                />
-                <AuthField
-                  label="Mobile Number (optional)"
-                  type="tel"
-                  placeholder="10-digit number"
-                  value={form.phone}
-                  onChange={(v) => update('phone', v)}
-                  error={errors.phone}
-                  icon="📱"
-                />
-              </>
-            )}
+            <AuthField
+              label="Email Address"
+              type="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={(v) => update('email', v)}
+              error={errors.email}
+              icon="📧"
+            />
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">

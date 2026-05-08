@@ -204,7 +204,7 @@ function CartItem({ item, onRemove, onQtyChange, onNavigate }) {
           <div className="flex items-center gap-2">
             <span className="font-bold text-forest-500 text-sm">₹{item.price * item.quantity}</span>
             <button
-              onClick={onRemove}
+              onClick={() => { if (window.confirm(`Remove "${item.name}" from your cart?`)) onRemove() }}
               className="w-6 h-6 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
