@@ -15,8 +15,8 @@ const nav = [
   { label:'Inventory',     href:'/inventory',             icon: Warehouse },
   { label:'Customers',     href:'/customers',             icon: Users },
   { label:'Coupons',       href:'/coupons',               icon: Tag },
-  { label:'Subscription Plans', href:'/subscription-plans', icon: RefreshCw },
-  { label:'Customer Subs', href:'/subscriptions',         icon: RefreshCw },
+  { label:'Sub Overview',   href:'/subscription-plans', icon: BarChart2  },
+  { label:'Subscriptions',  href:'/subscriptions',        icon: RefreshCw },
   { label:'Analytics',     href:'/analytics',             icon: BarChart2 },
   { label:'Settings',      href:'/settings',              icon: Settings },
 ]
