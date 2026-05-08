@@ -83,7 +83,7 @@ async function migrate() {
         user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
         product_id      UUID REFERENCES products(id) ON DELETE CASCADE,
         quantity        INTEGER DEFAULT 1,
-        frequency       VARCHAR(20) DEFAULT 'daily' CHECK (frequency IN ('daily','weekly','monthly')),
+        frequency       VARCHAR(30) DEFAULT 'daily' CHECK (frequency IN ('daily','weekly','bi-weekly','monthly','custom','once') OR frequency LIKE 'interval_%'),
         next_delivery   DATE,
         is_active       BOOLEAN DEFAULT true,
         created_at      TIMESTAMPTZ DEFAULT NOW()
