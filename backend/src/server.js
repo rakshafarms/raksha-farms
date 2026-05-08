@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url'
 dotenv.config()
 
 import { initDb } from './config/initDb.js'
-import { adminAuth } from '../middleware/auth.js'
+import { adminOnly } from './middleware/auth.js'
 import pool from './config/database.js'
 import authRoutes          from './routes/auth.js'
 import productsRoutes      from './routes/products.js'
@@ -79,7 +79,7 @@ app.use('/api/settings',          settingsRoutes)
 app.get('/health', (req, res) => res.json({
   status:    'ok',
   env:       process.env.NODE_ENV,
-  version:   '2026-05-08-v21',   // bump this on every deploy to verify new code is live
+  version:   '2026-05-08-v22',   // bump this on every deploy to verify new code is live
   features:  ['orders', 'order-tracking', 'google-auth', 'cross-device-sync', 'partial-rejection', 'low-stock-alerts', 'subscriptions', 'stock-deduction', 'soft-delete', 'admin-product-filters', 'subscription-dashboard', 'delivery-calendar', 'generate-orders', 'stock-warnings', 'payment-tracking', 'safe-json-parse', 'archived-order-block', 'order-number', 'saved-addresses-api', 'cart-sync-on-login'],
   database:  process.env.DATABASE_URL ? 'configured' : 'not-configured',
 }))
@@ -88,7 +88,7 @@ app.get('/health', (req, res) => res.json({
 app.get('/api/test', (req, res) => res.json({ message: 'API is working!', timestamp: new Date().toISOString() }))
 
 // TEMPORARY: wipe all test orders + subscriptions (admin only — remove after use)
-app.delete('/api/admin/wipe-test-data', adminAuth, async (req, res) => {
+app.delete('/api/admin/wipe-test-data', ...adminOnly, async (req, res) => {
   try {
     const subs   = await pool.query('DELETE FROM subscriptions RETURNING id')
     const orders = await pool.query('DELETE FROM orders RETURNING id')
