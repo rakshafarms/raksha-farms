@@ -200,7 +200,7 @@ export default function Navbar() {
                         </div>
                         <div className="border-t border-gray-50 py-1">
                           <button
-                            onClick={() => { logout(); navigate('/') }}
+                            onClick={() => { if (window.confirm('Are you sure you want to sign out?')) { logout(); navigate('/') } }}
                             className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors"
                           >
                             Sign Out
@@ -269,7 +269,7 @@ export default function Navbar() {
                   <MobileNavLink to="/profile">Profile</MobileNavLink>
                   <MobileNavLink to="/my-orders">My Orders</MobileNavLink>
                   <button
-                    onClick={() => { logout(); navigate('/') }}
+                    onClick={() => { if (window.confirm('Are you sure you want to sign out?')) { logout(); navigate('/') } }}
                     className="block w-full text-left px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 font-medium text-sm transition-colors"
                   >
                     Sign Out
