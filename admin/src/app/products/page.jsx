@@ -33,9 +33,13 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES)
+  const [refreshKey, setRefreshKey] = useState(0)
   const prevSearch = useRef('')
 
-  // Single effect: debounce 300ms for search typing, immediate for filter changes
+  // Increment refreshKey to force a reload after mutations (save/archive/delete)
+  function load() { setRefreshKey(k => k + 1) }
+
+  // Single effect: debounce 300ms for search typing, immediate for filter/refresh changes
   useEffect(() => {
     const delay = search !== prevSearch.current ? 300 : 0
     prevSearch.current = search
@@ -52,7 +56,7 @@ export default function ProductsPage() {
       finally { setLoading(false) }
     }, delay)
     return () => clearTimeout(t)
-  }, [search, statusFilter, categoryFilter])
+  }, [search, statusFilter, categoryFilter, refreshKey])
 
   // Load categories once
   useEffect(() => {
@@ -133,7 +137,7 @@ export default function ProductsPage() {
           <Search size={16} className="text-gray-400"/>
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search products…" className="outline-none text-sm flex-1"/>
-          {search && <button onClick={()=>{ setSearch(''); setTimeout(load,0) }}><X size={14} className="text-gray-400"/></button>}
+          {search && <button onClick={()=>setSearch('')}><X size={14} className="text-gray-400"/></button>}
         </div>
 
         {/* Category filter */}
