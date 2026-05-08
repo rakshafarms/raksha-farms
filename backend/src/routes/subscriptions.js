@@ -3,7 +3,7 @@ import {
   getDashboard, getCalendar, generateOrders,
   getSubscriptions, getSubscriptionDetail,
   updateSubscriptionAdmin, markDelivered, skipDelivery,
-  getMySubscriptions, toggleMySubscription, cancelMySubscription,
+  getMySubscriptions, createSubscription, toggleMySubscription, cancelMySubscription,
 } from '../controllers/subscriptionsController.js'
 import { adminOnly, verifyToken } from '../middleware/auth.js'
 
@@ -22,6 +22,7 @@ r.post('/:id/skip',         ...adminOnly, skipDelivery)
 
 // ── Customer routes ────────────────────────────────────────────────────────────
 r.get('/mine',              verifyToken, getMySubscriptions)
+r.post('/create',           verifyToken, createSubscription)
 r.patch('/:id/toggle',      verifyToken, toggleMySubscription)
 r.delete('/:id',            verifyToken, cancelMySubscription)
 

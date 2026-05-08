@@ -375,6 +375,36 @@ export async function getSubscriptions(req, res) {
 }
 
 // ── Customer: get own subscriptions ───────────────────────────────────────────
+// ── Customer: create subscription ──────────────────────────────────────────────
+export async function createSubscription(req, res) {
+  try {
+    const { items, frequency, start_date, address, custom_schedule, interval_days } = req.body
+    if (!items?.length || !frequency) return res.status(400).json({ error: 'items and frequency are required' })
+
+    const pricePerCycle = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
+    const startDate = start_date || new Date().toISOString().split('T')[0]
+
+    const notes = custom_schedule ? JSON.stringify({ custom_schedule }) : null
+
+    const { rows } = await query(`
+      INSERT INTO subscriptions
+        (user_id, items, price_per_cycle, frequency, next_delivery, start_date, is_active, address, notes)
+      VALUES ($1,$2,$3,$4,$5::date,$6::date,true,$7,$8)
+      RETURNING *
+    `, [
+      req.user.id,
+      JSON.stringify(items),
+      pricePerCycle,
+      frequency,
+      startDate,
+      startDate,
+      address ? JSON.stringify(address) : null,
+      notes,
+    ])
+    res.status(201).json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+}
+
 export async function getMySubscriptions(req, res) {
   try {
     const { rows } = await query(`${BASE_SELECT} WHERE s.user_id=$1 ORDER BY s.created_at DESC`, [req.user.id])

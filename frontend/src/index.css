@@ -332,3 +332,10 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ── Subscription sheet slide-up ── */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-slide-up { animation: slideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1); }
