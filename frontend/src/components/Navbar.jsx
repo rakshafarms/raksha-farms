@@ -3,8 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { useWishlist } from '../context/WishlistContext'
 import { useAuth } from '../context/AuthContext'
-import LocationPicker from './LocationPicker'
-import { useLocationCtx } from '../context/LocationContext'
 
 const announcements = [
   '🌱 100% Organic & Pesticide Free — Straight from our farms',
@@ -21,13 +19,11 @@ export default function Navbar() {
   const { user, logout, isLoggedIn } = useAuth()
   const location  = useLocation()
   const navigate  = useNavigate()
-  const { savedLocation } = useLocationCtx()
   const [scrolled, setScrolled]         = useState(false)
   const [menuOpen, setMenuOpen]         = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen]     = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
-  const [showLocationPicker, setShowLocationPicker] = useState(false)
   const userMenuRef = useRef(null)
   const searchRef   = useRef(null)
 
@@ -68,7 +64,6 @@ export default function Navbar() {
 
   return (
     <>
-      {showLocationPicker && <LocationPicker onClose={() => setShowLocationPicker(false)} />}
       <header className="sticky top-0 z-50">
         {/* Announcement bar */}
         <div className="bg-forest-500 text-white text-xs overflow-hidden">
@@ -99,26 +94,6 @@ export default function Navbar() {
                   className="h-9 sm:h-11 w-auto object-contain group-hover:scale-105 transition-transform duration-300"
                 />
               </Link>
-
-              {/* Location button */}
-              <button
-                onClick={() => setShowLocationPicker(true)}
-                className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-sage-50 border border-gray-200 hover:border-forest-300 transition-all max-w-[200px] group"
-              >
-                <svg className="w-4 h-4 text-forest-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                <div className="text-left min-w-0">
-                  <p className="text-[10px] text-gray-400 leading-none">Deliver to</p>
-                  <p className="text-xs font-bold text-gray-700 truncate leading-tight mt-0.5">
-                    {savedLocation ? savedLocation.area : 'Select Location'}
-                  </p>
-                </div>
-                <svg className="w-3 h-3 text-gray-400 flex-shrink-0 group-hover:text-forest-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7"/>
-                </svg>
-              </button>
 
               {/* Desktop nav links */}
               <div className="hidden md:flex items-center gap-6">
@@ -248,20 +223,6 @@ export default function Navbar() {
                   </div>
                 </div>
               )}
-              {/* Mobile location button */}
-              <button
-                onClick={() => { setMenuOpen(false); setShowLocationPicker(true) }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-sage-50 text-left"
-              >
-                <svg className="w-4 h-4 text-forest-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                <div>
-                  <p className="text-[10px] text-gray-400 leading-none">Deliver to</p>
-                  <p className="text-sm font-semibold text-gray-700">{savedLocation ? savedLocation.area : 'Select Location'}</p>
-                </div>
-              </button>
               <MobileNavLink to="/">Shop</MobileNavLink>
               <MobileNavLink to="/wishlist">Wishlist {wishlist.length > 0 && `(${wishlist.length})`}</MobileNavLink>
               {isLoggedIn ? (
