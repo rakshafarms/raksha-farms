@@ -184,7 +184,7 @@ export default function OrderTrackingPage() {
             Back to My Orders
           </Link>
           <h1 className="text-2xl font-bold text-gray-800">Track Order</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Order #{String(orderId).slice(-12)}</p>
+          <p className="text-gray-400 text-sm mt-0.5">Order #{String(orderId).slice(0,8)}</p>
         </div>
         {isRejected ? (
           <div className="card p-6 mb-5 text-center bg-red-50 border border-red-200">
@@ -241,7 +241,7 @@ export default function OrderTrackingPage() {
             </span>
           )}
         </div>
-        <p className="text-gray-400 text-sm mt-0.5">Order #{order.orderId.slice(-12)}</p>
+        <p className="text-gray-400 text-sm mt-0.5">Order #{order.orderId.slice(0,8)}</p>
       </div>
 
       {/* Partial rejection alert — appears above tracker when some items rejected */}

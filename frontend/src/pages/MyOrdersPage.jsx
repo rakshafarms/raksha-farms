@@ -235,7 +235,7 @@ function OrderCard({ order }) {
           {/* Order info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="font-mono text-sm font-bold text-gray-800">#{order.orderId?.slice(-8)}</span>
+              <span className="font-mono text-sm font-bold text-gray-800">#{order.orderId?.slice(0,8)}</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isPartial ? 'bg-amber-50 text-amber-700' : cfg.pill}`}>
                 {isPartial ? 'Partial' : cfg.label}
               </span>

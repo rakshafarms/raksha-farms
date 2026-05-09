@@ -329,7 +329,7 @@ export default function ProfilePage() {
                 className="card p-4 flex items-center gap-4 hover:shadow-soft transition-all block">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className="font-mono text-sm font-bold text-gray-700">#{order.orderId.slice(-8)}</span>
+                    <span className="font-mono text-sm font-bold text-gray-700">#{order.orderId.slice(0,8)}</span>
                     <StatusBadge status={order.status} />
                   </div>
                   <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
