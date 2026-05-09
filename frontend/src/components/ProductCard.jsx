@@ -33,7 +33,6 @@ export default function ProductCard({ product }) {
   const { addToast } = useToast()
   const [adding, setAdding]               = useState(false)
   const [wishlisting, setWishlisting]     = useState(false)
-  const [notifySubmitted, setNotifySubmitted] = useState(false)
   const [imgError, setImgError]           = useState(false)
 
   const [selectedVariant, setSelectedVariant] = useState(
@@ -70,12 +69,6 @@ export default function ProductCard({ product }) {
     toggleWishlist(product)
     addToast(wishlisted ? `Removed from wishlist` : `${product.name} wishlisted!`, wishlisted ? 'info' : 'success')
     setTimeout(() => setWishlisting(false), 300)
-  }
-
-  function handleNotifyMe(e) {
-    e.preventDefault()
-    setNotifySubmitted(true)
-    addToast("We'll notify you when this is back in stock!", 'success')
   }
 
   function increment() {
@@ -220,24 +213,9 @@ export default function ProductCard({ product }) {
 
         {/* Cart control */}
         {isOutOfStock ? (
-          notifySubmitted ? (
-            <div className="flex items-center justify-center gap-1.5 py-2.5 bg-forest-50 rounded-xl text-forest-600 text-xs font-semibold min-h-[44px]">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              We'll notify you!
-            </div>
-          ) : (
-            <button
-              onClick={handleNotifyMe}
-              className="w-full py-2.5 rounded-xl text-xs font-bold border-2 border-earth-400 text-earth-500 hover:bg-earth-50 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1.5 min-h-[44px]"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              Notify Me
-            </button>
-          )
+          <div className="flex items-center justify-center py-2.5 bg-red-50 rounded-xl text-red-400 text-xs font-semibold min-h-[44px]">
+            Out of Stock
+          </div>
         ) : cartItem ? (
           <div className="flex items-center justify-between bg-forest-50 rounded-xl p-1 min-h-[44px]">
             <button

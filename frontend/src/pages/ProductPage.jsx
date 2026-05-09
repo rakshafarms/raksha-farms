@@ -34,7 +34,6 @@ export default function ProductPage() {
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [qty, setQty] = useState(1)
   const [showSubSheet, setShowSubSheet] = useState(false)
-  const [notified, setNotified] = useState(false)
   const [imgError, setImgError] = useState(false)
 
   const activePrice  = selectedVariant?.price ?? product?.price
@@ -72,11 +71,6 @@ export default function ProductPage() {
     addToCart(product, qty, selectedVariant)
     addToast(`${product.name} added to cart!`, 'success')
     openDrawer()
-  }
-
-  function handleNotifyMe() {
-    setNotified(true)
-    addToast("We'll notify you when it's back in stock!", 'success')
   }
 
   return (
@@ -214,21 +208,9 @@ export default function ProductPage() {
 
           {/* Quantity + Add to cart */}
           {isOutOfStock ? (
-            notified ? (
-              <div className="flex items-center gap-2 py-4 text-forest-600 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                You'll be notified when it's back!
-              </div>
-            ) : (
-              <button onClick={handleNotifyMe} className="btn-accent w-full flex items-center justify-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                Notify Me When Available
-              </button>
-            )
+            <div className="flex items-center justify-center py-4 bg-red-50 rounded-xl text-red-400 font-semibold">
+              Out of Stock
+            </div>
           ) : cartItem ? (
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-forest-50 rounded-xl p-1.5">
