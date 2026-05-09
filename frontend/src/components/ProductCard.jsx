@@ -159,24 +159,24 @@ export default function ProductCard({ product }) {
       </Link>
 
       {/* Content */}
-      <div className="p-2.5 sm:p-3.5 flex flex-col flex-1">
+      <div className="p-2.5 sm:p-3 flex flex-col flex-1">
         {/* Rating */}
         <div className="flex items-center gap-1 mb-1">
           <Stars rating={rating} />
-          <span className="text-[10px] text-gray-400 font-medium">({rating.toFixed(1)})</span>
+          <span className="text-[10px] text-gray-400">({rating.toFixed(1)})</span>
         </div>
 
-        {/* Name */}
-        <Link to={`/product/${product.id}`} className="font-bold text-gray-800 text-sm leading-tight mb-0.5 hover:text-forest-500 transition-colors line-clamp-1">
+        {/* Name — extrabold, tighter */}
+        <Link to={`/product/${product.id}`} className="font-extrabold text-gray-900 text-sm leading-snug mb-0.5 hover:text-forest-600 transition-colors line-clamp-2">
           {product.name}
         </Link>
 
-        {/* Description — 1 line on mobile, 2 on desktop */}
-        <p className="text-gray-400 text-xs mb-2 leading-relaxed line-clamp-1 sm:line-clamp-2 flex-1">
+        {/* Description — small, muted */}
+        <p className="text-[11px] text-gray-400 mb-2 leading-relaxed line-clamp-1 flex-1">
           {product.description}
         </p>
 
-        {/* Variant selector — single row, no wrapping */}
+        {/* Variant selector */}
         {visibleVariants.length > 1 && (
           <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-hide">
             {visibleVariants.map((v) => (
@@ -195,94 +195,84 @@ export default function ProductCard({ product }) {
           </div>
         )}
 
-        {/* Price + stock */}
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-forest-500 font-black text-lg sm:text-xl flex-shrink-0">₹{displayPrice}</span>
-              {offerPrice && <span className="text-gray-400 text-xs line-through flex-shrink-0">₹{activePrice}</span>}
-              <span className="text-gray-400 text-[10px] truncate">/{displayUnit}</span>
+        {/* Price + compact cart control — side by side */}
+        <div className="flex items-end justify-between gap-2 mt-auto pt-1">
+          {/* Price left */}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-forest-600 font-black text-base leading-none">₹{displayPrice}</span>
+              {offerPrice && <span className="text-gray-400 text-[11px] line-through">₹{activePrice}</span>}
             </div>
-            {discountPct > 0 && (
-              <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full w-fit mt-0.5">
-                {discountPct}% OFF
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-gray-400 text-[10px]">/{displayUnit}</span>
+              {discountPct > 0 && (
+                <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                  {discountPct}% OFF
+                </span>
+              )}
+              {isLowStock && (
+                <span className="text-[10px] font-semibold text-earth-600 bg-earth-50 px-1.5 py-0.5 rounded-full">
+                  {product.stock} left!
+                </span>
+              )}
+            </div>
           </div>
-          {!isOutOfStock && (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-              isLowStock ? 'bg-earth-50 text-earth-600' : 'bg-sage-50 text-gray-500'
-            }`}>
-              {isLowStock ? `${product.stock} left` : 'In Stock'}
-            </span>
-          )}
-        </div>
 
-        {/* Cart control */}
-        {isOutOfStock ? (
-          notifySubmitted ? (
-            <div className="flex items-center justify-center gap-1.5 py-2.5 bg-forest-50 rounded-xl text-forest-600 text-xs font-semibold min-h-[44px]">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              We'll notify you!
+          {/* Cart control right — compact */}
+          {isOutOfStock ? (
+            notifySubmitted ? (
+              <span className="text-[10px] text-forest-600 font-semibold flex-shrink-0">✓ Notified</span>
+            ) : (
+              <button
+                onClick={handleNotifyMe}
+                className="flex-shrink-0 text-[11px] font-bold border-2 border-earth-400 text-earth-500 hover:bg-earth-50 active:scale-95 transition-all px-2.5 py-1.5 rounded-xl"
+              >
+                Notify
+              </button>
+            )
+          ) : cartItem ? (
+            <div className="flex items-center flex-shrink-0 bg-forest-500 rounded-xl overflow-hidden">
+              <button
+                onClick={decrement}
+                className="w-8 h-8 flex items-center justify-center text-white font-bold text-lg hover:bg-forest-600 active:scale-90 transition-all leading-none"
+              >
+                −
+              </button>
+              <span className="text-white font-bold text-sm min-w-[1.5rem] text-center">
+                {cartItem.quantity}
+              </span>
+              <button
+                onClick={increment}
+                disabled={product.stock > 0 && cartItem.quantity >= product.stock}
+                className="w-8 h-8 flex items-center justify-center text-white font-bold text-lg hover:bg-forest-600 active:scale-90 transition-all leading-none disabled:opacity-40"
+              >
+                +
+              </button>
             </div>
           ) : (
             <button
-              onClick={handleNotifyMe}
-              className="w-full py-2.5 rounded-xl text-xs font-bold border-2 border-earth-400 text-earth-500 hover:bg-earth-50 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1.5 min-h-[44px]"
+              onClick={handleAdd}
+              className={`btn-ripple flex-shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 ${
+                adding
+                  ? 'bg-forest-600 text-white'
+                  : 'bg-forest-500 hover:bg-forest-600 text-white shadow-sm'
+              }`}
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              Notify Me
-            </button>
-          )
-        ) : cartItem ? (
-          <div className="flex items-center justify-between bg-forest-50 rounded-xl p-1 min-h-[44px]">
-            <button
-              onClick={decrement}
-              className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-forest-600 font-bold hover:bg-red-50 hover:text-red-500 active:scale-90 transition-all duration-200 text-lg leading-none"
-            >
-              −
-            </button>
-            <span className="font-bold text-forest-700 text-base">
-              {cartItem.quantity} <span className="text-xs font-normal text-gray-400">{activeUnit}</span>
-            </span>
-            <button
-              onClick={increment}
-              disabled={product.stock > 0 && cartItem.quantity >= product.stock}
-              className="w-9 h-9 rounded-lg bg-forest-500 shadow-sm flex items-center justify-center text-white font-bold hover:bg-forest-600 active:scale-90 transition-all duration-200 text-lg leading-none disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              +
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={handleAdd}
-            className={`btn-ripple w-full py-2.5 rounded-xl text-sm font-bold transition-all duration-200 flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95 ${
-              adding
-                ? 'bg-forest-600 text-white scale-95'
-                : 'bg-forest-500 hover:bg-forest-600 text-white shadow-sm hover:shadow-forest'
-            }`}
-          >
-            {adding ? (
-              <>
+              {adding ? (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
-                Added!
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-                Add to Cart
-              </>
-            )}
-          </button>
-        )}
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
