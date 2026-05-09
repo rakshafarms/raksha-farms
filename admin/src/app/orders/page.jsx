@@ -23,6 +23,18 @@ const STATUS_META = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt    = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
+// Format order ID as ddmmyyhhmmss in IST
+const fmtOrderId = (iso) => {
+  const d = new Date(iso)
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000)
+  const dd  = String(ist.getUTCDate()).padStart(2,'0')
+  const mm  = String(ist.getUTCMonth()+1).padStart(2,'0')
+  const yy  = String(ist.getUTCFullYear()).slice(-2)
+  const hh  = String(ist.getUTCHours()).padStart(2,'0')
+  const min = String(ist.getUTCMinutes()).padStart(2,'0')
+  const ss  = String(ist.getUTCSeconds()).padStart(2,'0')
+  return `${dd}${mm}${yy}${hh}${min}${ss}`
+}
 const parseAddr = (o) => {
   try { return typeof o.address === 'string' ? JSON.parse(o.address || '{}') : (o.address || {}) }
   catch { return {} }
@@ -92,7 +104,7 @@ function RejectModal({ order, onClose, onConfirm }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-bold text-gray-900">Reject Order Items</h2>
-            <p className="text-xs text-gray-400 mt-0.5">#{order.reference_id || order.id?.slice(0,8)}</p>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono font-bold">#{order.created_at ? fmtOrderId(order.created_at) : order.id?.slice(0,8)}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X size={16}/></button>
         </div>
@@ -168,7 +180,10 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject }) {
         {/* Name + time */}
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{name}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{phone} · {fmtTime(o.created_at)}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            <span className="font-mono font-bold text-gray-600">#{fmtOrderId(o.created_at)}</span>
+            <span className="mx-1">·</span>{fmtTime(o.created_at)}
+          </p>
         </div>
 
         {/* Items preview */}

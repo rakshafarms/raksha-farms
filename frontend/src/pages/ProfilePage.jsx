@@ -7,6 +7,19 @@ import { useAddresses } from '../context/AddressContext'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
+const fmtOrderId = (iso) => {
+  if (!iso) return '--------'
+  const d = new Date(iso)
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000)
+  const dd  = String(ist.getUTCDate()).padStart(2,'0')
+  const mm  = String(ist.getUTCMonth()+1).padStart(2,'0')
+  const yy  = String(ist.getUTCFullYear()).slice(-2)
+  const hh  = String(ist.getUTCHours()).padStart(2,'0')
+  const min = String(ist.getUTCMinutes()).padStart(2,'0')
+  const ss  = String(ist.getUTCSeconds()).padStart(2,'0')
+  return `${dd}${mm}${yy}${hh}${min}${ss}`
+}
+
 const LABEL_OPTIONS = ['Home', 'Work', 'Hostel', 'Other']
 const LABEL_ICONS   = { Home: '🏠', Work: '🏢', Hostel: '🏫', Other: '📍' }
 const EMPTY_FORM    = { label: 'Home', name: '', phone: '', address: '', city: '', pincode: '', notes: '' }
@@ -329,7 +342,7 @@ export default function ProfilePage() {
                 className="card p-4 flex items-center gap-4 hover:shadow-soft transition-all block">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className="font-mono text-sm font-bold text-gray-700">#{order.orderId.slice(0,8)}</span>
+                    <span className="font-mono text-sm font-bold text-gray-700">#{fmtOrderId(order.createdAt)}</span>
                     <StatusBadge status={order.status} />
                   </div>
                   <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>

@@ -5,6 +5,20 @@ import { useOrders } from '../context/OrdersContext'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
+// Format order ID as ddmmyyhhmmss in IST
+const fmtOrderId = (iso) => {
+  if (!iso) return '--------'
+  const d = new Date(iso)
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000)
+  const dd  = String(ist.getUTCDate()).padStart(2,'0')
+  const mm  = String(ist.getUTCMonth()+1).padStart(2,'0')
+  const yy  = String(ist.getUTCFullYear()).slice(-2)
+  const hh  = String(ist.getUTCHours()).padStart(2,'0')
+  const min = String(ist.getUTCMinutes()).padStart(2,'0')
+  const ss  = String(ist.getUTCSeconds()).padStart(2,'0')
+  return `${dd}${mm}${yy}${hh}${min}${ss}`
+}
+
 const STATUS_CONFIG = {
   pending:          { label: 'Pending',         dot: 'bg-amber-400',   pill: 'bg-amber-50 text-amber-700',   border: 'border-amber-200' },
   accepted:         { label: 'Accepted',         dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700',     border: 'border-blue-200'  },
@@ -235,7 +249,7 @@ function OrderCard({ order }) {
           {/* Order info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="font-mono text-sm font-bold text-gray-800">#{order.orderId?.slice(0,8)}</span>
+              <span className="font-mono text-sm font-bold text-gray-800">#{fmtOrderId(order.createdAt)}</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isPartial ? 'bg-amber-50 text-amber-700' : cfg.pill}`}>
                 {isPartial ? 'Partial' : cfg.label}
               </span>

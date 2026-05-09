@@ -4,6 +4,19 @@ import { useOrders } from '../context/OrdersContext'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
+const fmtOrderId = (iso) => {
+  if (!iso) return '--------'
+  const d = new Date(iso)
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000)
+  const dd  = String(ist.getUTCDate()).padStart(2,'0')
+  const mm  = String(ist.getUTCMonth()+1).padStart(2,'0')
+  const yy  = String(ist.getUTCFullYear()).slice(-2)
+  const hh  = String(ist.getUTCHours()).padStart(2,'0')
+  const min = String(ist.getUTCMinutes()).padStart(2,'0')
+  const ss  = String(ist.getUTCSeconds()).padStart(2,'0')
+  return `${dd}${mm}${yy}${hh}${min}${ss}`
+}
+
 // Normalise a raw backend order row into the same shape the UI expects
 function normaliseBackendOrder(b) {
   const addr = (() => {
@@ -184,7 +197,7 @@ export default function OrderTrackingPage() {
             Back to My Orders
           </Link>
           <h1 className="text-2xl font-bold text-gray-800">Track Order</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Order #{String(orderId).slice(0,8)}</p>
+          <p className="text-gray-400 text-sm mt-0.5 font-mono">Order #---</p>
         </div>
         {isRejected ? (
           <div className="card p-6 mb-5 text-center bg-red-50 border border-red-200">
@@ -241,7 +254,7 @@ export default function OrderTrackingPage() {
             </span>
           )}
         </div>
-        <p className="text-gray-400 text-sm mt-0.5">Order #{order.orderId.slice(0,8)}</p>
+        <p className="text-gray-400 text-sm mt-0.5 font-mono font-bold">Order #{fmtOrderId(order.createdAt)}</p>
       </div>
 
       {/* Partial rejection alert — appears above tracker when some items rejected */}
