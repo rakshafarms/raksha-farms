@@ -14,8 +14,8 @@ export default function StatusBadge({ status }) {
     preparing:        'Preparing',
     out_for_delivery: 'Out for Delivery',
     delivered:        'Delivered',
-    cancelled:        'Cancelled',   // customer-initiated
-    rejected:         'Rejected',    // admin-initiated
+    cancelled:        'Cancelled by Customer',   // customer-initiated
+    rejected:         'Cancelled by Admin',      // admin-initiated
   }
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${map[status] || 'bg-gray-100 text-gray-600'}`}>

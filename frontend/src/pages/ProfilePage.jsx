@@ -537,11 +537,20 @@ function StatusBadge({ status }) {
     accepted:         'bg-blue-100 text-blue-700',
     out_for_delivery: 'bg-purple-100 text-purple-700',
     delivered:        'bg-forest-100 text-forest-700',
+    cancelled:        'bg-gray-100 text-gray-500',
     rejected:         'bg-red-100 text-red-600',
+  }
+  const labels = {
+    pending:          'Pending',
+    accepted:         'Accepted',
+    out_for_delivery: 'On the Way',
+    delivered:        'Delivered',
+    cancelled:        'Cancelled by Customer',
+    rejected:         'Cancelled by Admin',
   }
   return (
     <span className={`badge text-[10px] ${map[status] || map.pending}`}>
-      {status?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+      {labels[status] || status?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
     </span>
   )
 }

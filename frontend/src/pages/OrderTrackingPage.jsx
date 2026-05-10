@@ -30,7 +30,7 @@ function normaliseBackendOrder(b) {
   const STATUS_MAP = {
     placed: 'pending', accepted: 'accepted', preparing: 'accepted',
     out_for_delivery: 'out_for_delivery', delivered: 'delivered',
-    cancelled: 'rejected', rejected: 'rejected',
+    cancelled: 'cancelled', rejected: 'rejected',
   }
   return {
     orderId:       b.reference_id || b.id,
@@ -60,6 +60,7 @@ const STATUS_INDEX = {
   accepted:         1,
   out_for_delivery: 2,
   delivered:        3,
+  cancelled:        -1,
   rejected:         -1,
 }
 
@@ -127,7 +128,7 @@ export default function OrderTrackingPage() {
         backendId: minimal.id,
         status:    { placed:'pending', accepted:'accepted', preparing:'accepted',
                      out_for_delivery:'out_for_delivery', delivered:'delivered',
-                     cancelled:'rejected', rejected:'rejected' }[minimal.status] || minimal.status,
+                     cancelled:'cancelled', rejected:'rejected' }[minimal.status] || minimal.status,
         total: 0, deliveryFee: 0, subtotal: 0,
         items: [], customer: {}, paymentMethod: '', notes: null,
         createdAt: minimal.updatedAt, updatedAt: minimal.updatedAt,
@@ -185,8 +186,10 @@ export default function OrderTrackingPage() {
 
   // Partial view — we have status but couldn't fetch full order details (guest + no cache)
   if (order._partial) {
-    const currentStep = STATUS_INDEX[order.status] ?? 0
-    const isRejected  = order.status === 'rejected'
+    const currentStep    = STATUS_INDEX[order.status] ?? 0
+    const isRejected     = order.status === 'rejected'
+    const isCancelled    = order.status === 'cancelled'
+    const isTerminal     = isRejected || isCancelled
     return (
       <div className="page-enter max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
         <div className="mb-6">
@@ -199,12 +202,16 @@ export default function OrderTrackingPage() {
           <h1 className="text-2xl font-bold text-gray-800">Track Order</h1>
           <p className="text-gray-400 text-sm mt-0.5 font-mono">Order #---</p>
         </div>
-        {isRejected ? (
-          <div className="card p-6 mb-5 text-center bg-red-50 border border-red-200">
-            <p className="text-4xl mb-3">❌</p>
-            <h2 className="font-bold text-red-700 text-lg">Order Rejected</h2>
-            <p className="text-red-400 text-sm mt-2">This order could not be fulfilled.</p>
-            <a href="tel:+919346566945" className="btn-primary mt-4 inline-flex bg-red-500 hover:bg-red-600">Call Support</a>
+        {isTerminal ? (
+          <div className={`card p-6 mb-5 text-center ${isRejected ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
+            <p className="text-4xl mb-3">{isRejected ? '❌' : '🚫'}</p>
+            <h2 className={`font-bold text-lg ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
+              {isRejected ? 'Cancelled by Admin' : 'Cancelled by Customer'}
+            </h2>
+            <p className={`text-sm mt-2 ${isRejected ? 'text-red-400' : 'text-gray-400'}`}>
+              {isRejected ? 'This order could not be fulfilled.' : 'This order was cancelled.'}
+            </p>
+            {isRejected && <a href="tel:+919346566945" className="btn-primary mt-4 inline-flex bg-red-500 hover:bg-red-600">Call Support</a>}
           </div>
         ) : (
           <div className="card p-6 mb-5 text-center">
@@ -225,6 +232,8 @@ export default function OrderTrackingPage() {
 
   const currentStep       = STATUS_INDEX[order.status] ?? 0
   const isRejected        = order.status === 'rejected'
+  const isCancelled       = order.status === 'cancelled'
+  const isTerminal        = isRejected || isCancelled
   const rejInfo           = parseRejectionInfo(order.notes)
   const hasPartialReject  = !!rejInfo && order.status === 'accepted'
 
@@ -276,17 +285,23 @@ export default function OrderTrackingPage() {
       )}
 
       {/* Status tracker */}
-      {isRejected ? (
-        <div className="card p-6 mb-5 text-center bg-red-50 border border-red-200">
-          <p className="text-4xl mb-3">❌</p>
-          <h2 className="font-bold text-red-700 text-lg">Order Rejected</h2>
+      {isTerminal ? (
+        <div className={`card p-6 mb-5 text-center ${isRejected ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
+          <p className="text-4xl mb-3">{isRejected ? '❌' : '🚫'}</p>
+          <h2 className={`font-bold text-lg ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
+            {isRejected ? 'Cancelled by Admin' : 'Cancelled by Customer'}
+          </h2>
           {rejInfo?.remarks && (
             <p className="text-red-600 text-sm mt-1 font-medium">"{rejInfo.remarks}"</p>
           )}
-          <p className="text-red-400 text-sm mt-2">This order could not be fulfilled. Please contact us for assistance.</p>
-          <a href="tel:+919346566945" className="btn-primary mt-4 inline-flex bg-red-500 hover:bg-red-600">
-            Call Support
-          </a>
+          <p className={`text-sm mt-2 ${isRejected ? 'text-red-400' : 'text-gray-400'}`}>
+            {isRejected ? 'This order could not be fulfilled. Please contact us for assistance.' : 'This order was cancelled.'}
+          </p>
+          {isRejected && (
+            <a href="tel:+919346566945" className="btn-primary mt-4 inline-flex bg-red-500 hover:bg-red-600">
+              Call Support
+            </a>
+          )}
         </div>
       ) : (
         <div className="card p-6 mb-5">
