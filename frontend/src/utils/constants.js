@@ -1,22 +1,3 @@
-// Sequential order ID counter
-function _nextSeq() {
-  const key = '_rf_seq'
-  const n = parseInt(sessionStorage.getItem(key) || '0', 10) + 1
-  sessionStorage.setItem(key, String(n))
-  return String(n).padStart(4, '0')
-}
-
-export function generateOrderId() {
-  const d = new Date()
-  const dd   = String(d.getDate()).padStart(2, '0')
-  const mm   = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const hh   = String(d.getHours()).padStart(2, '0')
-  const min  = String(d.getMinutes()).padStart(2, '0')
-  const ss   = String(d.getSeconds()).padStart(2, '0')
-  return `RF-${dd}-${mm}-${yyyy}-${hh}${min}${ss}-${_nextSeq()}`
-}
-
 export const FREE_DELIVERY_THRESHOLD = 500
 export const DELIVERY_FEE_STANDARD  = 30
 export const DELIVERY_FEE_EXPRESS   = 60

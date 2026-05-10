@@ -30,8 +30,8 @@ const STATUS = {
   preparing:        { label: 'Preparing',       color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-400' },
   out_for_delivery: { label: 'Out for Delivery',color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  dot: 'bg-violet-400' },
   delivered:        { label: 'Delivered',       color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-400' },
-  cancelled:        { label: 'Cust. Cancelled', color: '#9ca3af', bg: 'bg-gray-100',   text: 'text-gray-600',    dot: 'bg-gray-400' },
-  rejected:         { label: 'Admin Cancelled', color: '#ef4444', bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-400' },
+  cancelled:        { label: 'Cancelled', color: '#9ca3af', bg: 'bg-gray-100',   text: 'text-gray-600',    dot: 'bg-gray-400' },
+  rejected:         { label: 'Rejected', color: '#ef4444', bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-400' },
 }
 
 // ─── sub-components ─────────────────────────────────────────────────────────

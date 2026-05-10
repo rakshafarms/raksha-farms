@@ -17,8 +17,8 @@ const STATUS_META = {
   preparing:        { label: 'Preparing',        dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' },
   out_for_delivery: { label: 'Out for Delivery', dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200' },
   delivered:        { label: 'Delivered',        dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' },
-  cancelled:        { label: 'Cust. Cancelled',  dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200' },
-  rejected:         { label: 'Admin Cancelled',  dot: 'bg-red-500',     pill: 'bg-red-50 text-red-600 ring-1 ring-red-200' },
+  cancelled:        { label: 'Cancelled',  dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200' },
+  rejected:         { label: 'Rejected',  dot: 'bg-red-500',     pill: 'bg-red-50 text-red-600 ring-1 ring-red-200' },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

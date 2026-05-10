@@ -204,6 +204,20 @@ export async function createOrder(req, res) {
       if (u[0]) userId = u[0].id
     }
 
+    // Generate a guest-friendly reference_id server-side (IST). Client-supplied
+    // values are still accepted for backward compat, but new clients no longer send.
+    const finalReferenceId = referenceId || (() => {
+      const now = new Date(Date.now() + 5.5 * 3600 * 1000)
+      const dd  = String(now.getUTCDate()).padStart(2,'0')
+      const mm  = String(now.getUTCMonth()+1).padStart(2,'0')
+      const yy  = String(now.getUTCFullYear()).slice(-2)
+      const hh  = String(now.getUTCHours()).padStart(2,'0')
+      const mi  = String(now.getUTCMinutes()).padStart(2,'0')
+      const ss  = String(now.getUTCSeconds()).padStart(2,'0')
+      const rnd = Math.floor(Math.random() * 9000 + 1000)
+      return `RF-${dd}${mm}${yy}-${hh}${mi}${ss}-${rnd}`
+    })()
+
     const { rows } = await client.query(
       `INSERT INTO orders (user_id, items, subtotal, delivery_fee, total, status, payment_method, address, notes, reference_id)
        VALUES ($1, $2, $3, $4, $5, 'placed', $6, $7, $8, $9) RETURNING *`,
@@ -216,7 +230,7 @@ export async function createOrder(req, res) {
         paymentMethod || 'cod',
         JSON.stringify(address),
         customer?.notes || notes || '',
-        referenceId || null,
+        finalReferenceId,
       ]
     )
     const order = rows[0]

@@ -14,7 +14,6 @@ import { ProductsProvider } from './context/ProductsContext'
 import { OrdersProvider }   from './context/OrdersContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { WishlistProvider } from './context/WishlistContext'
-import { LocationProvider } from './context/LocationContext'
 import { AddressProvider }  from './context/AddressContext'
 import Navbar               from './components/Navbar'
 import Footer               from './components/Footer'
@@ -32,7 +31,6 @@ import WishlistPage         from './pages/WishlistPage'
 import ProfilePage          from './pages/ProfilePage'
 import OrderTrackingPage    from './pages/OrderTrackingPage'
 import NotFoundPage         from './pages/NotFoundPage'
-import FindOrdersPage       from './pages/FindOrdersPage'
 
 function RequireAuth({ children }) {
   const { isLoggedIn } = useAuth()
@@ -46,7 +44,6 @@ function RequireAuth({ children }) {
 export default function App() {
   return (
     <ToastProvider>
-      <LocationProvider>
       <ProductsProvider>
         <OrdersProvider>
           <WishlistProvider>
@@ -71,7 +68,6 @@ export default function App() {
                         <Route path="/track/:orderId" element={<OrderTrackingPage />} />
                         <Route path="/my-orders"      element={<RequireAuth><MyOrdersPage /></RequireAuth>} />
                         <Route path="/profile"        element={<RequireAuth><ProfilePage /></RequireAuth>} />
-                        <Route path="/find-orders"    element={<FindOrdersPage />} />
                         <Route path="*"               element={<NotFoundPage />} />
                       </Routes>
                     </main>
@@ -85,7 +81,6 @@ export default function App() {
           </WishlistProvider>
         </OrdersProvider>
       </ProductsProvider>
-      </LocationProvider>
     </ToastProvider>
   )
 }
