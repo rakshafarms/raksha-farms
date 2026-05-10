@@ -206,7 +206,7 @@ export default function OrderTrackingPage() {
           <div className={`card p-6 mb-5 text-center ${isRejected ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
             <p className="text-4xl mb-3">{isRejected ? '❌' : '🚫'}</p>
             <h2 className={`font-bold text-lg ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
-              {isRejected ? 'Cancelled by Admin' : 'Cancelled by Customer'}
+              {isRejected ? 'Rejected by Admin' : 'Cancelled by Customer'}
             </h2>
             <p className={`text-sm mt-2 ${isRejected ? 'text-red-400' : 'text-gray-400'}`}>
               {isRejected ? 'This order could not be fulfilled.' : 'This order was cancelled.'}
@@ -289,7 +289,7 @@ export default function OrderTrackingPage() {
         <div className={`card p-6 mb-5 text-center ${isRejected ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
           <p className="text-4xl mb-3">{isRejected ? '❌' : '🚫'}</p>
           <h2 className={`font-bold text-lg ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
-            {isRejected ? 'Cancelled by Admin' : 'Cancelled by Customer'}
+            {isRejected ? 'Rejected by Admin' : 'Cancelled by Customer'}
           </h2>
           {rejInfo?.remarks && (
             <p className="text-red-600 text-sm mt-1 font-medium">"{rejInfo.remarks}"</p>

@@ -546,7 +546,7 @@ function StatusBadge({ status }) {
     out_for_delivery: 'On the Way',
     delivered:        'Delivered',
     cancelled:        'Cancelled by Customer',
-    rejected:         'Cancelled by Admin',
+    rejected:         'Rejected by Admin',
   }
   return (
     <span className={`badge text-[10px] ${map[status] || map.pending}`}>

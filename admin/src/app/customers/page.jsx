@@ -68,7 +68,7 @@ function OrderDrawer({ customer, onClose }) {
   const STATUS_LABEL = {
     placed:'Placed', accepted:'Accepted', preparing:'Preparing',
     out_for_delivery:'Out for Delivery', delivered:'Delivered',
-    cancelled:'Cancelled by Customer', rejected:'Cancelled by Admin',
+    cancelled:'Cancelled by Customer', rejected:'Rejected by Admin',
   }
 
   return (

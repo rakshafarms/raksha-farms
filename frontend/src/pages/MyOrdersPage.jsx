@@ -26,7 +26,7 @@ const STATUS_CONFIG = {
   out_for_delivery: { label: 'On the way',       dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700', border: 'border-violet-200'},
   delivered:        { label: 'Delivered',        dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200' },
   cancelled:        { label: 'Cancelled by Customer', dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500',    border: 'border-gray-200'  },
-  rejected:         { label: 'Cancelled by Admin',   dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',       border: 'border-red-200'   },
+  rejected:         { label: 'Rejected by Admin',   dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',       border: 'border-red-200'   },
 }
 
 const FILTER_TABS = [
@@ -35,7 +35,7 @@ const FILTER_TABS = [
   { id: 'out_for_delivery', label: 'On the way' },
   { id: 'delivered',        label: 'Delivered' },
   { id: 'cancelled',        label: 'Cancelled' },
-  { id: 'rejected',         label: 'Cancelled by Admin' },
+  { id: 'rejected',         label: 'Rejected by Admin' },
 ]
 
 export default function MyOrdersPage() {

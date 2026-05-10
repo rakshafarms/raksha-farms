@@ -9,7 +9,7 @@ const STATUS_MAP = {
   preparing:        'accepted',
   out_for_delivery: 'out_for_delivery',
   delivered:        'delivered',
-  cancelled:        'rejected',
+  cancelled:        'cancelled',
   rejected:         'rejected',
 }
 
