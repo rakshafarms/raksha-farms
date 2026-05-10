@@ -1,6 +1,20 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
 
+// Map subscription `frequency` string column → integer days when there is no
+// linked plan (sp.frequency_days NULL). Without this, markDelivered/skipDelivery
+// fall back to 1 day and roll a weekly subscription forward by a single day.
+function frequencyToDays(frequency, intervalDays) {
+  if (Number(intervalDays) > 0) return Number(intervalDays)
+  switch ((frequency || '').toLowerCase()) {
+    case 'daily':    return 1
+    case 'weekly':   return 7
+    case 'biweekly': return 14
+    case 'monthly':  return 30
+    default:         return 1
+  }
+}
+
 const BASE_SELECT = `
   SELECT
     s.id, s.is_active, s.frequency, s.next_delivery, s.price_per_cycle,
@@ -93,8 +107,11 @@ export async function getDashboard(req, res) {
 // ── Admin: calendar — subscriptions grouped by delivery date ───────────────────
 export async function getCalendar(req, res) {
   try {
-    const today    = new Date().toISOString().split('T')[0]
-    const sevenOut = new Date(Date.now() + 13 * 86400000).toISOString().split('T')[0]
+    // Compute today/sevenOut in IST so the default window matches admin's local calendar.
+    const istNow      = new Date(Date.now() + 5.5 * 3600 * 1000)
+    const today       = istNow.toISOString().split('T')[0]
+    const sevenOutIst = new Date(istNow.getTime() + 13 * 86400000)
+    const sevenOut    = sevenOutIst.toISOString().split('T')[0]
     const from = req.query.from || today
     const to   = req.query.to   || sevenOut
 
@@ -287,7 +304,7 @@ export async function generateOrders(req, res) {
       )
 
       // Bug 7: do NOT increment delivery_count here — only increment when actually delivered
-      const days = sub.frequency_days || 1
+      const days = sub.frequency_days || frequencyToDays(sub.frequency, sub.interval_days)
       await client.query(
         `UPDATE subscriptions
          SET next_delivery  = $1::date + ($2 || ' days')::interval,
@@ -378,21 +395,24 @@ export async function getSubscriptions(req, res) {
 // ── Customer: create subscription ──────────────────────────────────────────────
 export async function createSubscription(req, res) {
   try {
-    const { items, frequency, start_date, address, custom_schedule, interval_days } = req.body
+    const { items, frequency, start_date, address, custom_schedule, interval_days, plan_id } = req.body
     if (!items?.length || !frequency) return res.status(400).json({ error: 'items and frequency are required' })
 
     const pricePerCycle = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
     const startDate = start_date || new Date().toISOString().split('T')[0]
 
-    const notes = custom_schedule ? JSON.stringify({ custom_schedule }) : null
+    const notes = custom_schedule
+      ? JSON.stringify({ custom_schedule, interval_days: interval_days || null })
+      : (interval_days ? JSON.stringify({ interval_days }) : null)
 
     const { rows } = await query(`
       INSERT INTO subscriptions
-        (user_id, items, price_per_cycle, frequency, next_delivery, start_date, is_active, address, notes)
-      VALUES ($1,$2,$3,$4,$5::date,$6::date,true,$7,$8)
+        (user_id, plan_id, items, price_per_cycle, frequency, next_delivery, start_date, is_active, address, notes)
+      VALUES ($1,$2,$3,$4,$5,$6::date,$7::date,true,$8,$9)
       RETURNING *
     `, [
       req.user.id,
+      plan_id || null,
       JSON.stringify(items),
       pricePerCycle,
       frequency,
@@ -431,7 +451,7 @@ export async function markDelivered(req, res) {
     }
 
     const s    = sub[0]
-    const days = s.frequency_days || 1
+    const days = s.frequency_days || frequencyToDays(s.frequency, s.interval_days)
     const today = new Date().toISOString().split('T')[0]
     const deliveryDate = s.next_delivery
       ? String(s.next_delivery).split('T')[0]
@@ -510,7 +530,7 @@ export async function skipDelivery(req, res) {
     }
 
     const s    = sub[0]
-    const days = s.frequency_days || 1
+    const days = s.frequency_days || frequencyToDays(s.frequency, s.interval_days)
     const today = new Date().toISOString().split('T')[0]
     const skipDate = s.next_delivery ? String(s.next_delivery).split('T')[0] : today
 

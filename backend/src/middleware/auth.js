@@ -29,10 +29,13 @@ export function adminSecret(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' })
   const token = authHeader.split(' ')[1]
-  const secret = process.env.ADMIN_SECRET || 'raksha@admin2024'
-  if (token === secret) {
+  const secret = process.env.ADMIN_SECRET
+  if (secret && token === secret) {
     req.user = { role: 'admin' }
     return next()
+  }
+  if (!secret) {
+    console.error('[auth] ADMIN_SECRET env var is not set — admin password auth disabled')
   }
   // Fall back to JWT admin token
   try {

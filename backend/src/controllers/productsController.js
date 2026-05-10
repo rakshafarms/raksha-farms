@@ -70,7 +70,7 @@ export async function createProduct(req, res) {
 
 export async function updateProduct(req, res) {
   try {
-    const { name, category, description, price, offer_price, stock, unit, is_active, is_featured } = req.body
+    const { name, category, description, price, offer_price, stock, unit, is_active, is_featured, variants } = req.body
     const image_url   = req.file ? `/uploads/${req.file.filename}` : undefined
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
     const activeVal   = is_active === true || is_active === 'true'
@@ -86,6 +86,14 @@ export async function updateProduct(req, res) {
     ]
     const vals = [name, category, description, price, stock, unit, activeVal, featuredVal, offerVal]
     if (image_url) { sets.push(`image_url=$${vals.length + 1}`); vals.push(image_url) }
+    // variants only updated when explicitly provided (FormData strings come as JSON)
+    if (variants !== undefined) {
+      let parsed = variants
+      if (typeof variants === 'string') {
+        try { parsed = JSON.parse(variants) } catch { parsed = [] }
+      }
+      sets.push(`variants=$${vals.length + 1}`); vals.push(JSON.stringify(parsed || []))
+    }
 
     const { rows } = await query(
       `UPDATE products SET ${sets.join(',')} WHERE id=$${vals.length + 1} RETURNING *`,

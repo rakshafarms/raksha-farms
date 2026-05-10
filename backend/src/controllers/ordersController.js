@@ -156,7 +156,25 @@ export async function createOrder(req, res) {
         [coupon_code.toUpperCase()]
       )
       const coupon = cRows[0]
-      if (coupon && serverSubtotal >= Number(coupon.min_order || 0)) {
+      let couponValid = !!(coupon && serverSubtotal >= Number(coupon.min_order || 0))
+      // Re-check first_order_only here (validateCoupon checks too, but a direct
+      // POST to /api/orders could otherwise bypass that gate).
+      if (couponValid && coupon.first_order_only) {
+        const userIdForCheck = req.user?.id
+        const emailForCheck  = (customer?.email || req.user?.email || '').toLowerCase()
+        if (userIdForCheck || emailForCheck) {
+          const { rows: prior } = await client.query(
+            `SELECT 1 FROM orders
+             WHERE status NOT IN ('cancelled','rejected')
+               AND ($1::uuid IS NOT NULL AND user_id = $1
+                    OR $2 <> '' AND LOWER(address->>'email') = $2)
+             LIMIT 1`,
+            [userIdForCheck || null, emailForCheck]
+          ).catch(() => ({ rows: [] }))
+          if (prior.length > 0) couponValid = false
+        }
+      }
+      if (couponValid) {
         const raw = coupon.type === 'percent'
           ? (serverSubtotal * Number(coupon.value) / 100)
           : Number(coupon.value)
@@ -497,10 +515,12 @@ export async function getMyOrders(req, res) {
 export async function getOrdersByPhone(req, res) {
   try {
     const phone = req.params.phone.replace(/\D/g, '').slice(-10)
-    if (phone.length < 8) return res.status(400).json({ error: 'Invalid phone' })
+    if (phone.length !== 10) return res.status(400).json({ error: 'Invalid phone' })
+    // Public endpoint — return only summary data (no address/email/customer name/notes)
+    // so a phone-number guess can't leak full PII.
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
-              items, address, notes, created_at, updated_at
+              items, created_at, updated_at
        FROM orders
        WHERE address->>'phone' LIKE $1
          AND created_at > NOW() - INTERVAL '90 days'
@@ -519,8 +539,12 @@ export async function trackOrder(req, res) {
       [req.params.id]
     )
     if (!rows[0]) return res.status(404).json({ error: 'Order not found' })
-    if (req.user?.id && rows[0].user_id && rows[0].user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Forbidden' })
+    // If the order has an owner, only that owner (or admin) may poll it by UUID.
+    // Guests must use /track-ref/:ref with the RF-… reference id printed at checkout.
+    if (rows[0].user_id) {
+      const isOwner = req.user?.id && rows[0].user_id === req.user.id
+      const isAdmin = req.user?.role === 'admin'
+      if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
     }
     res.json({ id: rows[0].id, status: rows[0].status, updatedAt: rows[0].updated_at })
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -547,7 +571,9 @@ export async function getOrderStats(req, res) {
         COUNT(*) FILTER (WHERE status='delivered')        AS delivered,
         COUNT(*) FILTER (WHERE status='cancelled')        AS cancelled,
         COUNT(*) AS total
-      FROM orders WHERE DATE(created_at) = CURRENT_DATE
+      FROM orders
+      WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date
+            = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
     `)
     res.json(rows[0])
   } catch (err) { res.status(500).json({ error: err.message }) }

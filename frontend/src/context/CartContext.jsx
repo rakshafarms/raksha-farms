@@ -86,18 +86,24 @@ export function CartProvider({ children }) {
 
   function addToCart(product, quantity = 1, selectedVariant = null) {
     const key = selectedVariant ? `${product.id}_${selectedVariant.label}` : product.id
+    // Guard: never silently drop a click for a product whose stock is unknown
+    // (undefined/null) or zero — only cap when stock is a known positive number.
+    const stock = Number.isFinite(Number(product.stock)) && Number(product.stock) > 0
+      ? Number(product.stock)
+      : Infinity
+    const safeQty = Math.max(1, Number(quantity) || 1)
     setCart(prev => {
       const existing = prev.find(item => item.cartKey === key)
       if (existing) {
         return prev.map(item =>
           item.cartKey === key
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
+            ? { ...item, quantity: Math.min(item.quantity + safeQty, stock) }
             : item
         )
       }
       const price = selectedVariant ? selectedVariant.price : product.price
       const unit  = selectedVariant ? selectedVariant.label : product.unit
-      return [...prev, { ...product, cartKey: key, quantity, price, unit, selectedVariant }]
+      return [...prev, { ...product, cartKey: key, quantity: Math.min(safeQty, stock), price, unit, selectedVariant }]
     })
   }
 
