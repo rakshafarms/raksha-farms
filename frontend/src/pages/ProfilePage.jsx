@@ -68,7 +68,7 @@ export default function ProfilePage() {
   const { addresses, addAddress, updateAddress, deleteAddress } = useAddresses()
   const navigate     = useNavigate()
 
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('orders')
 
   // Subscriptions
   const [mySubs, setMySubs]           = useState([])
@@ -146,10 +146,9 @@ export default function ProfilePage() {
   const activeSubs      = mySubs.filter(s => s.is_active).length
 
   const TABS = [
-    { id: 'overview',      label: 'Overview' },
+    { id: 'orders',        label: `Orders${orders.length ? ` (${orders.length})` : ''}` },
     { id: 'subscriptions', label: `Subscriptions${mySubs.length ? ` (${mySubs.length})` : ''}` },
     { id: 'addresses',     label: `Addresses${addresses.length ? ` (${addresses.length})` : ''}` },
-    { id: 'orders',        label: `Orders (${orders.length})` },
   ]
 
   function openAdd() { setEditingId(null); setFormData(EMPTY_FORM); setFormErrors({}); setShowForm(true) }
@@ -191,13 +190,10 @@ export default function ProfilePage() {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-gray-800">{user?.name}</h1>
-          <p className="text-gray-400 text-sm">{user?.email}</p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-forest-50 text-forest-600">
-              {user?.provider === 'google' ? 'Google Account' : 'Email Account'}
-            </span>
-            <span className="text-xs text-gray-400">Member since {user?.createdAt ? new Date(user.createdAt).getFullYear() : '2024'}</span>
-          </div>
+          <p className="text-gray-400 text-sm truncate">{user?.email}</p>
+          <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-forest-50 text-forest-600 mt-1">
+            {user?.provider === 'google' ? 'Google Account' : 'Email Account'}
+          </span>
         </div>
         <button onClick={() => {
             if (window.confirm('Sign out of your account?')) { logout(); navigate('/') }
@@ -207,11 +203,20 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* Stats */}
+      {/* Stats — tap to jump to tab */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
-        <StatBox value={orders.length}     label="Orders"    color="text-forest-500" />
-        <StatBox value={activeSubs}        label="Active Subs" color="text-blue-600" />
-        <StatBox value={`₹${totalSpent}`} label="Spent"      color="text-earth-600" />
+        <button onClick={() => setActiveTab('orders')} className="card p-3 sm:p-4 text-center hover:shadow-soft transition-all w-full">
+          <p className="text-lg sm:text-xl font-black text-forest-500 truncate">{orders.length}</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Orders</p>
+        </button>
+        <button onClick={() => setActiveTab('subscriptions')} className="card p-3 sm:p-4 text-center hover:shadow-soft transition-all w-full">
+          <p className="text-lg sm:text-xl font-black text-blue-600 truncate">{activeSubs}</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Active Subs</p>
+        </button>
+        <div className="card p-3 sm:p-4 text-center">
+          <p className="text-lg sm:text-xl font-black text-earth-600 truncate">₹{totalSpent.toLocaleString('en-IN')}</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Spent</p>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -225,38 +230,6 @@ export default function ProfilePage() {
           </button>
         ))}
       </div>
-
-      {/* ── OVERVIEW ── */}
-      {activeTab === 'overview' && (
-        <div className="animate-slide-up">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              { icon: '📦', label: 'My Orders',      to: '/my-orders' },
-              { icon: '❤️', label: `Wishlist (${wishlist.length})`, to: '/wishlist' },
-              { icon: '🔄', label: `Subscriptions${activeSubs ? ` (${activeSubs})` : ''}`, onClick: () => setActiveTab('subscriptions') },
-              { icon: '📍', label: `Addresses (${addresses.length})`, onClick: () => setActiveTab('addresses') },
-              { icon: '📞', label: 'Contact Support', to: 'tel:+919346566945', external: true },
-            ].map(item =>
-              item.external ? (
-                <a key={item.label} href={item.to} className="card p-4 flex flex-col items-center gap-2 text-center hover:shadow-soft transition-all">
-                  <span className="text-2xl">{item.icon}</span>
-                  <span className="text-sm font-semibold text-gray-700">{item.label}</span>
-                </a>
-              ) : item.onClick ? (
-                <button key={item.label} onClick={item.onClick} className="card p-4 flex flex-col items-center gap-2 text-center hover:shadow-soft transition-all w-full">
-                  <span className="text-2xl">{item.icon}</span>
-                  <span className="text-sm font-semibold text-gray-700">{item.label}</span>
-                </button>
-              ) : (
-                <Link key={item.label} to={item.to} className="card p-4 flex flex-col items-center gap-2 text-center hover:shadow-soft transition-all">
-                  <span className="text-2xl">{item.icon}</span>
-                  <span className="text-sm font-semibold text-gray-700">{item.label}</span>
-                </Link>
-              )
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── SUBSCRIPTIONS ── */}
       {activeTab === 'subscriptions' && (
@@ -359,6 +332,16 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {/* ── Quick links ── */}
+      <div className="flex gap-3 mt-6">
+        <Link to="/wishlist" className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          ❤️ Wishlist {wishlist.length > 0 && <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full">{wishlist.length}</span>}
+        </Link>
+        <a href="tel:+919346566945" className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          📞 Support
+        </a>
+      </div>
 
       {/* ── Address Form Modal ── */}
       {showForm && (
@@ -503,14 +486,6 @@ function SubCard({ sub, busySub, onToggle, onCancel }) {
   )
 }
 
-function StatBox({ value, label, color }) {
-  return (
-    <div className="card p-3 sm:p-4 text-center">
-      <p className={`text-lg sm:text-xl font-black ${color} truncate`}>{value}</p>
-      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium leading-tight">{label}</p>
-    </div>
-  )
-}
 
 function AddrField({ label, placeholder, value, onChange, error, required, textarea, type = 'text', prefix }) {
   const cls = `input-field ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''} ${prefix ? 'pl-12' : ''}`
