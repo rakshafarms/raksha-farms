@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useOrders } from '../context/OrdersContext'
 import { useWishlist } from '../context/WishlistContext'
 import { useAddresses } from '../context/AddressContext'
+import { useToast } from '../context/ToastContext'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -66,9 +67,11 @@ export default function ProfilePage() {
   const { orders }   = useOrders()
   const { wishlist } = useWishlist()
   const { addresses, addAddress, updateAddress, deleteAddress } = useAddresses()
+  const { addToast } = useToast()
   const navigate     = useNavigate()
 
   const [activeTab, setActiveTab] = useState('orders')
+  const [cancelConfirmId, setCancelConfirmId] = useState(null)
 
   // Subscriptions
   const [mySubs, setMySubs]           = useState([])
@@ -102,13 +105,12 @@ export default function ProfilePage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) fetchMySubs()
-      else alert('Failed to update subscription. Please try again.')
-    } catch (e) { console.error(e); alert('Network error. Please try again.') }
+      else addToast('Failed to update subscription. Please try again.', 'error')
+    } catch (e) { console.error(e); addToast('Network error. Please try again.', 'error') }
     finally { setBusySub(null) }
   }
 
   async function cancelSub(id) {
-    if (!confirm('Cancel this subscription? This cannot be undone.')) return
     setBusySub(id)
     try {
       const token = localStorage.getItem('auth_token')
@@ -116,10 +118,10 @@ export default function ProfilePage() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) fetchMySubs()
-      else alert('Failed to cancel subscription. Please try again.')
-    } catch (e) { console.error(e); alert('Network error. Please try again.') }
-    finally { setBusySub(null) }
+      if (res.ok) { fetchMySubs(); addToast('Subscription cancelled.', 'info') }
+      else addToast('Failed to cancel subscription. Please try again.', 'error')
+    } catch (e) { console.error(e); addToast('Network error. Please try again.', 'error') }
+    finally { setBusySub(null); setCancelConfirmId(null) }
   }
 
   // Address form
@@ -198,9 +200,7 @@ export default function ProfilePage() {
             {user?.provider === 'google' ? 'Google Account' : 'Email Account'}
           </span>
         </div>
-        <button onClick={() => {
-            if (window.confirm('Sign out of your account?')) { logout(); navigate('/') }
-          }}
+        <button onClick={() => { logout(); navigate('/') }}
           className="text-sm text-red-400 hover:text-red-600 font-medium border border-red-100 hover:border-red-300 px-4 py-2 rounded-xl transition-all flex-shrink-0">
           Sign Out
         </button>
@@ -410,6 +410,7 @@ export default function ProfilePage() {
 function SubCard({ sub, busySub, onToggle, onCancel }) {
   const items  = Array.isArray(sub.items) ? sub.items : []
   const isBusy = busySub === sub.id
+  const [confirmCancel, setConfirmCancel] = React.useState(false)
   const days   = daysUntil(sub.next_delivery)
 
   let nextLabel = '—'
@@ -454,10 +455,23 @@ function SubCard({ sub, busySub, onToggle, onCancel }) {
             }`}>
             {sub.is_active ? 'Pause' : 'Resume'}
           </button>
-          <button disabled={isBusy} onClick={() => onCancel(sub.id)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition">
-            Cancel
-          </button>
+          {confirmCancel ? (
+            <div className="flex items-center gap-1">
+              <button disabled={isBusy} onClick={() => onCancel(sub.id)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition">
+                {isBusy ? '…' : 'Yes, cancel'}
+              </button>
+              <button onClick={() => setConfirmCancel(false)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+                Keep
+              </button>
+            </div>
+          ) : (
+            <button disabled={isBusy} onClick={() => setConfirmCancel(true)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition">
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 

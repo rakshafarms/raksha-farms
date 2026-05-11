@@ -38,12 +38,7 @@ export default function CartPage() {
           <p className="text-gray-400 text-sm mt-0.5">{cart.length} item{cart.length !== 1 ? 's' : ''} in your cart</p>
         </div>
         <button
-          onClick={() => {
-            if (window.confirm('Remove all items from your cart?')) {
-              clearCart()
-              addToast('Cart cleared', 'info')
-            }
-          }}
+          onClick={() => { clearCart(); addToast('Cart cleared', 'info') }}
           className="text-sm text-red-400 hover:text-red-600 font-medium transition-colors"
         >
           Clear All
@@ -179,7 +174,7 @@ function CartItemRow({ item, maxStock, onUpdateQty, onRemove }) {
 
       {/* Remove — always visible (mobile-friendly) */}
       <button
-        onClick={() => { if (window.confirm(`Remove "${item.name}" from your cart?`)) onRemove() }}
+        onClick={() => onRemove()}
         className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
         aria-label="Remove item"
       >

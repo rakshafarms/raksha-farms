@@ -160,6 +160,16 @@ export function OrdersProvider({ children }) {
     return () => window.removeEventListener('rf:login', syncOrdersByUser)
   }, [syncOrdersByUser])
 
+  // On logout: clear local order cache so the next user starts fresh
+  useEffect(() => {
+    function onLogout() {
+      setOrders([])
+      localStorage.removeItem('rf_orders')
+    }
+    window.addEventListener('rf:logout', onLogout)
+    return () => window.removeEventListener('rf:logout', onLogout)
+  }, [])
+
   return (
     <OrdersContext.Provider value={{ orders, addOrder, updateOrderStatus, getOrder, getOrdersByUser, syncOrdersByPhone, syncOrdersByUser, applyBackendOrders }}>
       {children}

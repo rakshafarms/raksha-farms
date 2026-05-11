@@ -161,6 +161,9 @@ export function AuthProvider({ children }) {
   function logout() {
     setUser(null)
     localStorage.removeItem('auth_token')
+    localStorage.removeItem('rf_auth_user')
+    // Tell cart, wishlist, and orders contexts to clear their local state
+    window.dispatchEvent(new CustomEvent('rf:logout'))
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect()
     }

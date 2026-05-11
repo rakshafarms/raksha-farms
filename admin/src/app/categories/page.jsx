@@ -31,7 +31,7 @@ export default function CategoriesPage() {
 
   async function load() {
     setLoading(true)
-    try { const { data } = await categoriesAPI.getAll(); setCats(data) }
+    try { const { data } = await categoriesAPI.getAll(); setCats(Array.isArray(data) ? data : (data?.categories || [])) }
     catch(e) { console.error(e) } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])

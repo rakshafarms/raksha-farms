@@ -84,6 +84,17 @@ export function CartProvider({ children }) {
     return () => window.removeEventListener('rf:login', mergeBackendCart)
   }, []) // eslint-disable-line
 
+  // On logout: clear cart state so the next user starts fresh
+  useEffect(() => {
+    function onLogout() {
+      setCart([])
+      localStorage.removeItem('rf_cart')
+      hasSyncedFromBackend.current = false
+    }
+    window.addEventListener('rf:logout', onLogout)
+    return () => window.removeEventListener('rf:logout', onLogout)
+  }, [])
+
   function addToCart(product, quantity = 1, selectedVariant = null) {
     const key = selectedVariant ? `${product.id}_${selectedVariant.label}` : product.id
     // Guard: never silently drop a click for a product whose stock is unknown

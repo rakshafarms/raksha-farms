@@ -327,6 +327,9 @@ export default function CheckoutPage() {
         if (data.reference_id) {
           orderId = data.reference_id
           order.orderId = data.reference_id
+        } else if (data.id) {
+          orderId = String(data.id)
+          order.orderId = String(data.id)
         }
         // Override local order with server-confirmed values so tracking shows accurate totals
         order.total       = data.total       != null ? Number(data.total)       : order.total
@@ -374,7 +377,7 @@ export default function CheckoutPage() {
     setPlacing(false)
 
     addToast('Order placed successfully! 🎉', 'success', 5000)
-    navigate(`/track/${orderId}`)
+    navigate(orderId ? `/track/${orderId}` : '/my-orders')
   }
 
   return (

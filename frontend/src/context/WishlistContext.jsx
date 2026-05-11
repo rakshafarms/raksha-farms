@@ -56,6 +56,16 @@ export function WishlistProvider({ children }) {
     return () => window.removeEventListener('rf:login', syncFromBackend)
   }, [syncFromBackend])
 
+  // On logout: clear wishlist so the next user starts fresh
+  useEffect(() => {
+    function onLogout() {
+      setWishlist([])
+      hasSyncedFromBackend.current = false
+    }
+    window.addEventListener('rf:logout', onLogout)
+    return () => window.removeEventListener('rf:logout', onLogout)
+  }, [])
+
   // Debounced save to backend whenever wishlist changes
   useEffect(() => {
     if (!getToken()) return

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
 
 const IconX = () => (
@@ -36,6 +37,7 @@ function fmtDate(iso) {
 
 export default function SubscriptionSheet({ product, variant, onClose, onSuccess }) {
   const { user } = useAuth()
+  const { addToast } = useToast()
   const token = localStorage.getItem('auth_token')
   const navigate = useNavigate()
 
@@ -98,7 +100,7 @@ export default function SubscriptionSheet({ product, variant, onClose, onSuccess
       setDone(true)
       setTimeout(() => { onSuccess?.(); onClose() }, 1600)
     } catch (e) {
-      alert(e.message || 'Subscription failed. Please try again.')
+      addToast(e.message || 'Subscription failed. Please try again.', 'error')
     } finally {
       setSaving(false)
     }

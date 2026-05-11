@@ -169,8 +169,8 @@ export default function CustomersPage() {
       }
       Object.keys(params).forEach(k => !params[k] && delete params[k])
       const { data } = await customersAPI.getAll(params)
-      setCustomers(data.customers)
-      setTotal(data.total)
+      setCustomers(data.customers || [])
+      setTotal(data.total || 0)
       setPages(data.pages || 1)
       if (data.stats) setStats(data.stats)
     } catch(e) { console.error(e) }

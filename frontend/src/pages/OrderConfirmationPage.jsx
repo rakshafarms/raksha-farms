@@ -143,7 +143,9 @@ export default function OrderConfirmationPage() {
             {
               icon: '📞',
               title: 'We\'ll call you',
-              desc: `Our team will call +91 ${order.customer.phone} to confirm your order and delivery time.`,
+              desc: order.customer?.phone
+                ? `Our team will call +91 ${order.customer.phone} to confirm your order and delivery time.`
+                : 'Our team will confirm your order and delivery time shortly.',
             },
             {
               icon: '🚜',
@@ -176,7 +178,7 @@ export default function OrderConfirmationPage() {
         {/* Customer info */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <InfoRow icon="👤" label="Name" value={order.customer.name} />
-          <InfoRow icon="📞" label="Phone" value={`+91 ${order.customer.phone}`} />
+          {order.customer?.phone && <InfoRow icon="📞" label="Phone" value={`+91 ${order.customer.phone}`} />}
           <InfoRow icon="📍" label="Address" value={order.customer.address} className="sm:col-span-2" />
           {order.customer.notes && (
             <InfoRow icon="📝" label="Notes" value={order.customer.notes} className="sm:col-span-2" />

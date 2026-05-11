@@ -16,14 +16,17 @@ export default function InventoryPage() {
   const [products, setProducts] = useState([])
   const [lowStock, setLowStock] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [editing, setEditing] = useState(null)
   const [newStock, setNewStock] = useState('')
+  const [stockError, setStockError] = useState('')
   const [reason, setReason] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [search, setSearch] = useState('')
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES)
 
-  useEffect(() => {
+  function fetchAll() {
+    setLoading(true); setLoadError(false)
     Promise.all([
       productsAPI.getAll({ limit: 200 }),
       productsAPI.getLowStock(10),
@@ -32,18 +35,21 @@ export default function InventoryPage() {
       setProducts(all.data?.products || [])
       setLowStock(Array.isArray(low.data) ? low.data : [])
       if (cats.data && cats.data.length > 0) setCategories(cats.data.map(c => ({ slug: c.slug, name: c.name })))
-    }).catch(() => alert('Failed to load inventory')).finally(() => setLoading(false))
-  }, [])
+    }).catch(() => setLoadError(true)).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchAll() }, [])
 
   async function saveStock(id) {
     const qty = parseInt(newStock, 10)
-    if (isNaN(qty) || qty < 0) { alert('Please enter a valid stock quantity'); return }
+    if (isNaN(qty) || qty < 0) { setStockError('Please enter a valid stock quantity'); return }
+    setStockError('')
     try {
       await productsAPI.updateStock(id, qty, reason)
       setProducts(prev => prev.map(p => p.id === id ? { ...p, stock: qty } : p))
       setLowStock(prev => prev.filter(p => !(p.id === id && qty > 10)))
       setEditing(null); setNewStock(''); setReason('')
-    } catch(e) { alert('Failed to update stock') }
+    } catch(e) { setStockError('Failed to update stock. Please try again.') }
   }
 
   const filtered = products.filter(p => {
@@ -57,6 +63,17 @@ export default function InventoryPage() {
   const critical    = products.filter(p => p.stock > 0 && p.stock <= 5).length
   const lowStockCnt = products.filter(p => p.stock > 5 && p.stock <= 15).length
   const good        = products.filter(p => p.stock > 15).length
+
+  if (loadError) return (
+    <AdminLayout title="Inventory">
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <p className="text-red-500 font-semibold">Failed to load inventory data.</p>
+        <button onClick={fetchAll} className="px-4 py-2 bg-[#1B4332] text-white rounded-lg text-sm font-medium hover:bg-[#145229] transition">
+          Retry
+        </button>
+      </div>
+    </AdminLayout>
+  )
 
   return (
     <AdminLayout title="Inventory">
@@ -171,20 +188,23 @@ export default function InventoryPage() {
                   </td>
                   <td className="px-5 py-3">
                     {editing === p.id ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number" min="0" value={newStock}
-                          onChange={e => setNewStock(e.target.value)}
-                          className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
-                          placeholder="Qty"
-                        />
-                        <input
-                          value={reason} onChange={e => setReason(e.target.value)}
-                          className="w-32 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none"
-                          placeholder="Reason"
-                        />
-                        <button onClick={() => saveStock(p.id)} className="bg-[#1B4332] text-white px-2 py-1 rounded-lg text-xs hover:bg-[#163826]">Save</button>
-                        <button onClick={() => setEditing(null)} className="text-gray-400 text-xs hover:text-gray-600">Cancel</button>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number" min="0" value={newStock}
+                            onChange={e => { setNewStock(e.target.value); setStockError('') }}
+                            className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
+                            placeholder="Qty"
+                          />
+                          <input
+                            value={reason} onChange={e => setReason(e.target.value)}
+                            className="w-32 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none"
+                            placeholder="Reason"
+                          />
+                          <button onClick={() => saveStock(p.id)} className="bg-[#1B4332] text-white px-2 py-1 rounded-lg text-xs hover:bg-[#163826]">Save</button>
+                          <button onClick={() => { setEditing(null); setStockError('') }} className="text-gray-400 text-xs hover:text-gray-600">Cancel</button>
+                        </div>
+                        {stockError && <p className="text-red-500 text-xs">{stockError}</p>}
                       </div>
                     ) : (
                       <button
