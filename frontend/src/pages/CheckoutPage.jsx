@@ -57,6 +57,7 @@ export default function CheckoutPage() {
   const [form, setForm] = useState({
     name:    user?.name  || '',
     phone:   user?.phone || '',
+    email:   user?.email || '',
     address: '',
     city:    '',
     pincode: '',
@@ -283,7 +284,7 @@ export default function CheckoutPage() {
       phone:   form.phone.trim(),
       address: `${form.address.trim()}, ${form.city.trim()} — ${form.pincode.trim()}`,
       notes:   form.notes.trim(),
-      email:   user?.email || '',
+      email:   user?.email || form.email.trim() || '',
     }
     const items = cart.map((item) => ({
       id:       item.id,
@@ -303,7 +304,7 @@ export default function CheckoutPage() {
       deliverySlot:  activeSlot?.label,
       paymentMethod,
       status:       'pending',
-      userEmail:    user?.email || null,
+      userEmail:    user?.email || form.email.trim() || null,
       createdAt:    new Date().toISOString(),
       updatedAt:    new Date().toISOString(),
     }
@@ -652,6 +653,9 @@ export default function CheckoutPage() {
                   <Field label="Full Name" placeholder="e.g. Priya Sharma" value={form.name} onChange={(v) => setField('name', v)} error={errors.name} required />
                   <Field label="Mobile Number" placeholder="10-digit number" type="tel" value={form.phone} onChange={(v) => setField('phone', v)} error={errors.phone} required prefix="+91" />
                 </div>
+                {!user && (
+                  <Field label="Email Address" placeholder="you@example.com" type="email" value={form.email} onChange={(v) => setField('email', v)} error={errors.email} />
+                )}
                 <Field label="Delivery Address" placeholder="House no., Street, Locality" value={form.address} onChange={(v) => setField('address', v)} error={errors.address} required textarea />
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="City" placeholder="e.g. Hyderabad" value={form.city} onChange={(v) => setField('city', v)} error={errors.city} required />

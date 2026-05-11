@@ -21,12 +21,9 @@ export default function LoginPage() {
 
   const from = location.state?.from || '/'
 
-  // Redirect if already logged in — also sync orders
+  // Redirect if already logged in
   useEffect(() => {
-    if (isLoggedIn) {
-      syncOrdersByUser()
-      navigate(from, { replace: true })
-    }
+    if (isLoggedIn) navigate(from, { replace: true })
   }, [isLoggedIn, navigate, from])
 
   // Render Google button once GSI is ready

@@ -91,18 +91,21 @@ export default function AdminLayout({ children, title }) {
   function toggleBell() {
     setOpen(v => {
       if (!v) {
-        // Mark current visible tab items as seen when opening
-        markAllSeen(newOrders.map(o => o.id), SEEN_KEY)
-        markAllSeen(lowStockItems.map(p => p.id), SEEN_STOCK_KEY)
-        setUnreadOrders(0)
-        setUnreadStock(0)
+        // Only mark the currently visible tab as seen when opening
+        if (tab === 'orders') {
+          markAllSeen(newOrders.map(o => o.id), SEEN_KEY)
+          setUnreadOrders(0)
+        } else {
+          markAllSeen(lowStockItems.map(p => p.id), SEEN_STOCK_KEY)
+          setUnreadStock(0)
+        }
       }
       return !v
     })
   }
 
   function goToOrders() { setOpen(false); router.push('/orders') }
-  function goToInventory() { setOpen(false); router.push('/products') }
+  function goToInventory() { setOpen(false); router.push('/inventory') }
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -156,7 +159,11 @@ export default function AdminLayout({ children, title }) {
                   {/* Tabs */}
                   <div className="flex border-b border-gray-100">
                     <button
-                      onClick={() => setTab('orders')}
+                      onClick={() => {
+                        setTab('orders')
+                        markAllSeen(newOrders.map(o => o.id), SEEN_KEY)
+                        setUnreadOrders(0)
+                      }}
                       className={`flex-1 px-4 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors
                         ${tab === 'orders' ? 'text-[#1B4332] border-b-2 border-[#1B4332]' : 'text-gray-500 hover:text-gray-700'}`}
                     >
@@ -166,7 +173,11 @@ export default function AdminLayout({ children, title }) {
                       )}
                     </button>
                     <button
-                      onClick={() => setTab('stock')}
+                      onClick={() => {
+                        setTab('stock')
+                        markAllSeen(lowStockItems.map(p => p.id), SEEN_STOCK_KEY)
+                        setUnreadStock(0)
+                      }}
                       className={`flex-1 px-4 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors
                         ${tab === 'stock' ? 'text-[#1B4332] border-b-2 border-[#1B4332]' : 'text-gray-500 hover:text-gray-700'}`}
                     >

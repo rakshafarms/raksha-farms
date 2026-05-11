@@ -18,7 +18,7 @@ const IconCheck = () => (
   </svg>
 )
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 const MODES  = ['Daily', 'Custom', 'On Interval', 'Buy Once']
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -35,7 +35,8 @@ function fmtDate(iso) {
 }
 
 export default function SubscriptionSheet({ product, variant, onClose, onSuccess }) {
-  const { user, token } = useAuth()
+  const { user } = useAuth()
+  const token = localStorage.getItem('auth_token')
   const navigate = useNavigate()
 
   const [mode, setMode]         = useState('Daily')

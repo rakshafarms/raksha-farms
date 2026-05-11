@@ -29,17 +29,19 @@ export default function InventoryPage() {
       productsAPI.getLowStock(10),
       categoriesAPI.getAll().catch(() => ({ data: [] })),
     ]).then(([all, low, cats]) => {
-      setProducts(all.data.products)
-      setLowStock(low.data)
+      setProducts(all.data?.products || [])
+      setLowStock(Array.isArray(low.data) ? low.data : [])
       if (cats.data && cats.data.length > 0) setCategories(cats.data.map(c => ({ slug: c.slug, name: c.name })))
-    }).finally(() => setLoading(false))
+    }).catch(() => alert('Failed to load inventory')).finally(() => setLoading(false))
   }, [])
 
   async function saveStock(id) {
+    const qty = parseInt(newStock, 10)
+    if (isNaN(qty) || qty < 0) { alert('Please enter a valid stock quantity'); return }
     try {
-      await productsAPI.updateStock(id, parseInt(newStock), reason)
-      setProducts(prev => prev.map(p => p.id === id ? { ...p, stock: parseInt(newStock) } : p))
-      setLowStock(prev => prev.filter(p => !(p.id === id && parseInt(newStock) > 10)))
+      await productsAPI.updateStock(id, qty, reason)
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, stock: qty } : p))
+      setLowStock(prev => prev.filter(p => !(p.id === id && qty > 10)))
       setEditing(null); setNewStock(''); setReason('')
     } catch(e) { alert('Failed to update stock') }
   }
