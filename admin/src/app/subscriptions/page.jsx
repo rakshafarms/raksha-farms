@@ -548,7 +548,7 @@ export default function SubscriptionsPage() {
   }, [calFrom, calTo])
 
   const fetchList = useCallback(async () => {
-    try { const r = await subscriptionsAPI.getAll(); setSubs(Array.isArray(r.data) ? r.data : []) }
+    try { const r = await subscriptionsAPI.getAll(); const list = Array.isArray(r.data) ? r.data : (r.data?.subscriptions || r.data?.data || []); setSubs(list) }
     catch (e) { console.error(e) }
   }, [])
 

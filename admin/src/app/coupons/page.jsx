@@ -41,7 +41,7 @@ export default function CouponsPage() {
   const [filter, setFilter] = useState('all') // all | active | inactive | expired
 
   async function load() {
-    try { const { data } = await couponsAPI.getAll(); setCoupons(data) } catch(e) { console.error(e) }
+    try { const { data } = await couponsAPI.getAll(); setCoupons(Array.isArray(data) ? data : []) } catch(e) { console.error(e) }
   }
   useEffect(() => { load() }, [])
 

@@ -2,12 +2,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
-import { useOrders } from '../context/OrdersContext'
-
 export default function LoginPage() {
   const { loginWithEmail, signupWithEmail, renderGoogleButton, isLoggedIn, loading, googleReady } = useAuth()
   const { addToast } = useToast()
-  const { syncOrdersByUser } = useOrders()
   const navigate = useNavigate()
   const location = useLocation()
   const googleBtnRef = useRef(null)
@@ -79,9 +76,7 @@ export default function LoginPage() {
         await signupWithEmail(form.name, form.email, form.password, form.phone)
         addToast('Account created! Welcome to Raksha Farms 🌿', 'success')
       }
-      // Sync all past orders from backend immediately after login
-      setTimeout(() => syncOrdersByUser(), 500)
-      navigate(from, { replace: true })
+      // Navigation is handled by the isLoggedIn useEffect above
     } catch (err) {
       setErrors({ submit: err.message })
     } finally {

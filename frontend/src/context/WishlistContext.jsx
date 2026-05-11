@@ -36,11 +36,18 @@ export function WishlistProvider({ children }) {
   // Guard: don't save the initial [] to backend before the first DB load completes
   const hasSyncedFromBackend = useRef(!getToken())  // guests are always "synced"
 
-  // Sync from backend on mount and on login
+  // Sync from backend on mount and on login — merge guest-added items so they aren't lost
   const syncFromBackend = useCallback(async () => {
     const items = await loadWishlistFromBackend()
     hasSyncedFromBackend.current = true  // mark synced regardless of result
-    if (Array.isArray(items)) setWishlist(items)
+    if (Array.isArray(items)) {
+      setWishlist(prev => {
+        const backendIds = new Set(items.map(i => i.id))
+        // Keep any guest-added items that aren't already in the backend list
+        const guestOnly = prev.filter(i => !backendIds.has(i.id))
+        return [...items, ...guestOnly]
+      })
+    }
   }, [])
 
   useEffect(() => {

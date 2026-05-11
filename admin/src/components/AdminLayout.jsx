@@ -102,7 +102,7 @@ export default function AdminLayout({ children, title }) {
   }
 
   function goToOrders() { setOpen(false); router.push('/orders') }
-  function goToInventory() { setOpen(false); router.push('/inventory') }
+  function goToInventory() { setOpen(false); router.push('/products') }
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center">

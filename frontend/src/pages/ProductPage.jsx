@@ -32,6 +32,15 @@ export default function ProductPage() {
 
   const product = products.find((p) => p.id === id)
   const [selectedVariant, setSelectedVariant] = useState(null)
+
+  // Auto-select first variant whenever the product changes
+  useEffect(() => {
+    if (product?.variants?.length > 0) {
+      setSelectedVariant(product.variants[0])
+    } else {
+      setSelectedVariant(null)
+    }
+  }, [id, product])
   const [qty, setQty] = useState(1)
   const [showSubSheet, setShowSubSheet] = useState(false)
   const [imgError, setImgError] = useState(false)

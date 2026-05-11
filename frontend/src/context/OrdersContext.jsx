@@ -149,6 +149,11 @@ export function OrdersProvider({ children }) {
     } catch { /* silent */ }
   }, [])
 
+  // On mount: sync immediately if already logged in (page refresh case)
+  useEffect(() => {
+    if (localStorage.getItem('auth_token')) syncOrdersByUser()
+  }, []) // eslint-disable-line
+
   // On login (new device / cache cleared): restore orders from DB immediately
   useEffect(() => {
     window.addEventListener('rf:login', syncOrdersByUser)
