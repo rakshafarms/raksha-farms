@@ -84,9 +84,12 @@ export default function OrderTrackingPage() {
   // backendOrder is set when the order isn't in local cache but was fetched directly from API
   const [backendOrder, setBackendOrder] = useState(null)
   const fetchedRef = useRef(false)
+  // ref always holds latest order so the polling interval isn't stale
+  const orderRef   = useRef(null)
 
   // Derive order: prefer local cache (has richer merged data), fall back to direct fetch
   const order = orders.find((o) => o.orderId === orderId || o.backendId === orderId) || backendOrder
+  orderRef.current = order
 
   // Fetch the order directly from the backend when it's not in local state.
   // Handles: fresh browser, new device, shared tracking link, cleared cache.
@@ -149,7 +152,9 @@ export default function OrderTrackingPage() {
     const interval = setInterval(async () => {
       setSyncing(true)
       await syncOrdersByUser()
-      if (order?.customer?.phone) await syncOrdersByPhone(order.customer.phone)
+      // Use ref so we always read the latest order, not the stale closure value
+      const latest = orderRef.current
+      if (latest?.customer?.phone) await syncOrdersByPhone(latest.customer.phone)
       setSyncing(false)
     }, 30_000)
     return () => clearInterval(interval)

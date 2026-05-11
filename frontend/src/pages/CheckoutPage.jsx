@@ -132,7 +132,7 @@ export default function CheckoutPage() {
       const res = await fetch(BACKEND_URL + '/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: trimmed, order_total: totalPrice, user_id: user?.id || null }),
+        body: JSON.stringify({ code: trimmed, order_total: totalPrice, user_id: user?.id || null, email: user?.email || form.email || '' }),
       })
       const data = await res.json()
       if (!res.ok) { setCouponError(data.error || 'Invalid coupon'); return }
@@ -247,7 +247,7 @@ export default function CheckoutPage() {
           res = await fetch(`${BACKEND_URL}/api/subscriptions/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ items, frequency, start_date: subStartDate, address, custom_schedule }),
+            body: JSON.stringify({ items, frequency, start_date: subStartDate, address, custom_schedule, qty_per_delivery: subQty, email: user?.email || '' }),
           })
         } catch {
           addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
@@ -328,9 +328,9 @@ export default function CheckoutPage() {
           order.orderId = data.reference_id
         }
         // Override local order with server-confirmed values so tracking shows accurate totals
-        order.total       = Number(data.total)       || order.total
-        order.subtotal    = Number(data.subtotal)     || order.subtotal
-        order.deliveryFee = Number(data.delivery_fee) || order.deliveryFee
+        order.total       = data.total       != null ? Number(data.total)       : order.total
+        order.subtotal    = data.subtotal    != null ? Number(data.subtotal)    : order.subtotal
+        order.deliveryFee = data.delivery_fee != null ? Number(data.delivery_fee) : order.deliveryFee
         // Use server-validated items (prices may have been corrected server-side)
         if (Array.isArray(data.items) && data.items.length > 0) {
           order.items = data.items

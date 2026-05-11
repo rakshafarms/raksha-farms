@@ -126,13 +126,24 @@ export async function validateCoupon(req, res) {
     if (order_total < Number(coupon.min_order))
       return res.status(400).json({ error: `Minimum order ₹${coupon.min_order} required` })
 
-    // Check first_order_only
-    if (coupon.first_order_only && user_id) {
-      const prevOrders = await query(
-        `SELECT COUNT(*) as cnt FROM orders WHERE user_id=$1 AND status NOT IN ('cancelled','rejected')`,
-        [user_id]
-      )
-      if (parseInt(prevOrders.rows[0].cnt) > 0)
+    // Check first_order_only — check by user_id OR by email in address JSON
+    if (coupon.first_order_only) {
+      const { code: _c, order_total: _t, user_id: _u, email } = req.body
+      let prevCount = 0
+      if (user_id) {
+        const r = await query(
+          `SELECT COUNT(*) AS cnt FROM orders WHERE user_id=$1 AND status NOT IN ('cancelled','rejected')`,
+          [user_id]
+        )
+        prevCount = parseInt(r.rows[0].cnt)
+      } else if (email) {
+        const r = await query(
+          `SELECT COUNT(*) AS cnt FROM orders WHERE LOWER(address->>'email')=LOWER($1) AND status NOT IN ('cancelled','rejected')`,
+          [email]
+        )
+        prevCount = parseInt(r.rows[0].cnt)
+      }
+      if (prevCount > 0)
         return res.status(400).json({ error: 'This coupon is valid for first order only' })
     }
 

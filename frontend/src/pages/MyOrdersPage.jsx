@@ -32,10 +32,11 @@ const STATUS_CONFIG = {
 const FILTER_TABS = [
   { id: 'all',              label: 'All' },
   { id: 'pending',          label: 'Pending' },
+  { id: 'accepted',         label: 'Active' },
   { id: 'out_for_delivery', label: 'On the way' },
   { id: 'delivered',        label: 'Delivered' },
   { id: 'cancelled',        label: 'Cancelled' },
-  { id: 'rejected',         label: 'Rejected by Admin' },
+  { id: 'rejected',         label: 'Rejected' },
 ]
 
 export default function MyOrdersPage() {

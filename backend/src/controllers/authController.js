@@ -54,7 +54,7 @@ export async function login(req, res) {
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
 
     const token = signToken(user)
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } })
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -106,6 +106,9 @@ export async function googleAuth(req, res) {
     if (!gRes.ok) return res.status(401).json({ error: 'Invalid Google credential' })
     const payload = await gRes.json()
     if (!payload.email) return res.status(401).json({ error: 'No email in Google token' })
+    // Verify the token was issued for this app (prevents tokens from other apps being used)
+    const expectedAud = process.env.GOOGLE_CLIENT_ID
+    if (expectedAud && payload.aud !== expectedAud) return res.status(401).json({ error: 'Invalid Google credential' })
 
     // Find or create user
     let { rows } = await query('SELECT * FROM users WHERE email = $1', [payload.email.toLowerCase()])
@@ -122,7 +125,7 @@ export async function googleAuth(req, res) {
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
 
     const token = signToken(user)
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } })
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 

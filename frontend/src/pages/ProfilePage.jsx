@@ -86,9 +86,10 @@ export default function ProfilePage() {
       const res = await fetch(`${BACKEND_URL}/api/subscriptions/mine`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!res.ok) { setMySubs([]); return }
       const data = await res.json()
       setMySubs(Array.isArray(data) ? data : [])
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error(e); setMySubs([]) }
     finally { setSubsLoading(false) }
   }
 
@@ -96,12 +97,13 @@ export default function ProfilePage() {
     setBusySub(id)
     try {
       const token = localStorage.getItem('auth_token')
-      await fetch(`${BACKEND_URL}/api/subscriptions/${id}/toggle`, {
+      const res = await fetch(`${BACKEND_URL}/api/subscriptions/${id}/toggle`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       })
-      fetchMySubs()
-    } catch (e) { console.error(e) }
+      if (res.ok) fetchMySubs()
+      else alert('Failed to update subscription. Please try again.')
+    } catch (e) { console.error(e); alert('Network error. Please try again.') }
     finally { setBusySub(null) }
   }
 
@@ -110,12 +112,13 @@ export default function ProfilePage() {
     setBusySub(id)
     try {
       const token = localStorage.getItem('auth_token')
-      await fetch(`${BACKEND_URL}/api/subscriptions/${id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/subscriptions/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      fetchMySubs()
-    } catch (e) { console.error(e) }
+      if (res.ok) fetchMySubs()
+      else alert('Failed to cancel subscription. Please try again.')
+    } catch (e) { console.error(e); alert('Network error. Please try again.') }
     finally { setBusySub(null) }
   }
 

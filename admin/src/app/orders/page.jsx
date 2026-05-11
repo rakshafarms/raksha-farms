@@ -527,7 +527,7 @@ export default function OrdersPage() {
               placeholder="Search by name, phone, email or order ID…"
               className="outline-none text-sm flex-1 min-w-0 bg-transparent"
             />
-            {search && <button onClick={() => { setSearch(''); load({ search:'' }) }}><X size={12} className="text-gray-400 hover:text-gray-600"/></button>}
+            {search && <button onClick={() => { setSearch(''); load({ search:'', page: 1 }) }}><X size={12} className="text-gray-400 hover:text-gray-600"/></button>}
           </div>
 
           {/* Date range */}

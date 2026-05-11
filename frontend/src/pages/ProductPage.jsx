@@ -234,7 +234,7 @@ export default function ProductPage() {
               <div className="flex items-center gap-1 border-2 border-gray-200 rounded-xl px-3">
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-8 h-10 text-gray-500 font-bold text-xl hover:text-forest-500 transition-colors">−</button>
                 <span className="font-bold text-gray-700 w-8 text-center">{qty}</span>
-                <button onClick={() => setQty((q) => Math.min(product.stock, q + 1))} className="w-8 h-10 text-gray-500 font-bold text-xl hover:text-forest-500 transition-colors">+</button>
+                <button onClick={() => setQty((q) => product.stock > 0 ? Math.min(product.stock, q + 1) : q)} className="w-8 h-10 text-gray-500 font-bold text-xl hover:text-forest-500 transition-colors">+</button>
               </div>
               <button onClick={handleAddToCart} className="btn-primary flex-1 flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -93,6 +93,7 @@ export function AuthProvider({ children }) {
         } catch { /* fallback below */ }
         // Fallback — backend down (no JWT stored, sync won't work across devices)
         setUser({ uid: payload.sub, name: payload.name, email: payload.email, avatar: payload.picture, provider: 'google' })
+        window.dispatchEvent(new CustomEvent('rf:login'))
       },
     })
     const el = document.getElementById(containerId)

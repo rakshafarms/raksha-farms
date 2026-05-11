@@ -40,8 +40,8 @@ export default function BottomNav() {
           </svg>
         </NavBtn>
 
-        {/* Shop / Categories */}
-        <NavBtn onClick={goShop} isActive={pathname === '/'} label="Shop">
+        {/* Shop / Categories — never marked active since it's a scroll action, not a route */}
+        <NavBtn onClick={goShop} isActive={false} label="Shop">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
           </svg>
