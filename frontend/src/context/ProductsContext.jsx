@@ -4,6 +4,16 @@ import { INITIAL_PRODUCTS } from '../data/products2'
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 const API_URL = `${BACKEND_URL}/api/products`
 
+// Normalise any image URL coming from the DB:
+// – already absolute (http/https) → keep as-is
+// – legacy bundled path (/images/…)  → keep as-is
+// – uploaded file (/uploads/…)       → prepend BACKEND_URL
+function normalizeImg(url) {
+  if (!url) return null
+  if (url.startsWith('http') || url.startsWith('/images/')) return url
+  return `${BACKEND_URL}${url}`
+}
+
 const ProductsContext = createContext(null)
 
 export function ProductsProvider({ children }) {
@@ -33,19 +43,16 @@ export function ProductsProvider({ children }) {
           offer_price: p.offer_price ? Number(p.offer_price) : null,
           unit:        p.unit || 'kg',
           stock:       Number(p.stock),
-          image:       p.image_url
-            ? (p.image_url.startsWith('http')
-                ? p.image_url
-                : p.image_url.startsWith('/images/')
-                  ? p.image_url
-                  : `${BACKEND_URL}${p.image_url}`)
-            : null,
+          image:       normalizeImg(p.image_url),
           featured:    p.is_featured || false,
           organic:     true,
           rating:      4.7,
           reviews:     42,
           variants:    Array.isArray(p.variants) ? p.variants : [],
-          images:      Array.isArray(p.images) ? p.images : [],
+          // Apply the same URL normalisation to every gallery image
+          images:      Array.isArray(p.images)
+            ? p.images.map(normalizeImg).filter(Boolean)
+            : [],
         }))
         setProducts(normalized)
       })

@@ -111,13 +111,13 @@ export default function ProductPage() {
         <div className="relative select-none">
 
           {/* Main image */}
-          <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 shadow-soft">
+          <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-200 shadow-soft">
             {allImages.length > 0 ? (
               <img
                 key={activeImg}
                 src={allImages[activeImg]}
                 alt={product.name}
-                className="w-full h-full object-contain p-4 transition-opacity duration-200"
+                className="w-full h-full object-cover transition-opacity duration-200"
                 loading="lazy"
                 onError={() => { setImgError(true); if (activeImg > 0) setActiveImg(0) }}
               />
@@ -195,7 +195,7 @@ export default function ProductPage() {
                       : 'border-gray-200 opacity-60 hover:opacity-100 hover:border-gray-300'
                   }`}
                 >
-                  <img src={src} alt={`View ${i + 1}`} className="w-full h-full object-contain p-1" />
+                  <img src={src} alt={`View ${i + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
