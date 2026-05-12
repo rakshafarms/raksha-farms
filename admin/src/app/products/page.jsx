@@ -1,8 +1,19 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, categoriesAPI } from '../../lib/api'
-import { Plus, Pencil, Archive, Search, X, RotateCcw, Package } from 'lucide-react'
+import { Plus, Pencil, Archive, Search, X, RotateCcw, Package, Trash2, ImagePlus } from 'lucide-react'
+
+function useAdminToast() {
+  const [toast, setToast] = React.useState(null)
+  const show = (msg, type = 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const el = toast ? (
+    <div className={`fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      {toast.msg}
+    </div>
+  ) : null
+  return { show, el }
+}
 
 const FALLBACK_CATEGORIES = [
   { slug:'vegetables', name:'Vegetables' },{ slug:'fruits', name:'Fruits' },
@@ -11,7 +22,7 @@ const FALLBACK_CATEGORIES = [
   { slug:'millets', name:'Millets' },{ slug:'eggs', name:'Eggs & Meat' },
   { slug:'flours', name:'Stone-Ground Flours' },
 ]
-const EMPTY = { name:'', category:'', description:'', price:'', offer_price:'', stock:'', unit:'kg', is_featured:false, is_active:true }
+const EMPTY = { name:'', category:'', description:'', price:'', offer_price:'', stock:'', unit:'kg', is_featured:false, is_active:true, variants:[], existingImages:[], coverImageUrl:null }
 
 const STATUS_TABS = [
   { key: '',            label: 'All' },
@@ -22,6 +33,7 @@ const STATUS_TABS = [
 ]
 
 export default function ProductsPage() {
+  const { show: showToast, el: toastEl } = useAdminToast()
   const [products, setProducts]     = useState([])
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
@@ -34,6 +46,9 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [pendingArchive, setPendingArchive]       = useState(null)
+  const [pendingHardDelete, setPendingHardDelete] = useState(null)
+  const [newGalleryImages, setNewGalleryImages]   = useState([]) // File[]
   const prevSearch = useRef('')
 
   // Increment refreshKey to force a reload after mutations (save/archive/delete)
@@ -70,53 +85,68 @@ export default function ProductsPage() {
   function openAdd() {
     setEditing(null)
     setForm({ ...EMPTY, category: categories[0]?.slug || '' })
-    setImage(null); setShowModal(true)
+    setImage(null); setNewGalleryImages([]); setShowModal(true)
   }
   function openEdit(p) {
     setEditing(p.id)
+    const existingImages = Array.isArray(p.images) ? p.images : (p.images ? (() => { try { return JSON.parse(p.images) } catch { return [] } })() : [])
     setForm({
       name: p.name, category: p.category, description: p.description||'',
       price: p.price, offer_price: p.offer_price||'', stock: p.stock,
       unit: p.unit||'kg', is_featured: p.is_featured||false,
-      is_active: p.is_active !== false
+      is_active: p.is_active !== false,
+      variants: Array.isArray(p.variants) ? p.variants : [],
+      existingImages,
+      coverImageUrl: p.image_url || null,
     })
-    setImage(null); setShowModal(true)
+    setImage(null); setNewGalleryImages([]); setShowModal(true)
   }
 
   async function handleSave(e) {
     e.preventDefault(); setSaving(true)
     try {
       const fd = new FormData()
-      Object.entries(form).forEach(([k,v]) => fd.append(k, v))
+      // Basic fields
+      const skip = new Set(['variants','existingImages','coverImageUrl'])
+      Object.entries(form).forEach(([k,v]) => { if (!skip.has(k)) fd.append(k, v) })
+      // Variants as JSON
+      fd.append('variants', JSON.stringify(form.variants || []))
+      // Cover image
       if (image) fd.append('image', image)
+      else if (editing && form.coverImageUrl === null) fd.append('remove_image', 'true')
+      // Existing gallery images (so backend knows which to keep)
+      fd.append('existing_images', JSON.stringify(form.existingImages || []))
+      // New gallery images
+      newGalleryImages.forEach(f => fd.append('images', f))
       if (editing) await productsAPI.update(editing, fd)
       else await productsAPI.create(fd)
       setShowModal(false); load()
-    } catch(e) { alert(e.response?.data?.error || 'Save failed') }
+    } catch(e) { showToast(e.response?.data?.error || 'Save failed') }
     finally { setSaving(false) }
   }
 
-  async function handleArchive(p) {
-    if (!confirm(`Archive "${p.name}"? It will be hidden from the website but preserved in order history.`)) return
+  async function confirmArchive() {
+    if (!pendingArchive) return
+    const p = pendingArchive; setPendingArchive(null)
     try { await productsAPI.archive(p.id); load() }
-    catch(e) { alert('Archive failed') }
+    catch(e) { showToast('Archive failed') }
   }
 
   async function handleRestore(p) {
-    // Restore = update is_active to true
     const fd = new FormData()
     const fields = { name: p.name, category: p.category, description: p.description||'',
       price: p.price, offer_price: p.offer_price||'', stock: p.stock,
       unit: p.unit||'kg', is_featured: p.is_featured||false, is_active: true }
     Object.entries(fields).forEach(([k,v]) => fd.append(k, v))
     try { await productsAPI.update(p.id, fd); load() }
-    catch(e) { alert('Restore failed') }
+    catch(e) { showToast('Restore failed') }
   }
 
-  async function handleHardDelete(p) {
-    if (!confirm(`PERMANENTLY delete "${p.name}"? This cannot be undone and may break order history.`)) return
+  async function confirmHardDelete() {
+    if (!pendingHardDelete) return
+    const p = pendingHardDelete; setPendingHardDelete(null)
     try { await productsAPI.hardDelete(p.id); load() }
-    catch(e) { alert('Delete failed') }
+    catch(e) { showToast('Delete failed') }
   }
 
   const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace('/api','')
@@ -130,6 +160,36 @@ export default function ProductsPage() {
 
   return (
     <AdminLayout title="Products">
+      {toastEl}
+
+      {/* Archive confirm */}
+      {pendingArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-1">Archive &ldquo;{pendingArchive.name}&rdquo;?</p>
+            <p className="text-sm text-gray-400 mb-4">It will be hidden from the website but preserved in order history.</p>
+            <div className="flex gap-3">
+              <button onClick={confirmArchive} className="flex-1 py-2 bg-orange-500 text-white rounded-xl font-medium text-sm hover:bg-orange-600">Yes, archive</button>
+              <button onClick={() => setPendingArchive(null)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hard-delete confirm */}
+      {pendingHardDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-1">Permanently delete &ldquo;{pendingHardDelete.name}&rdquo;?</p>
+            <p className="text-sm text-red-400 mb-4">This cannot be undone and may break order history.</p>
+            <div className="flex gap-3">
+              <button onClick={confirmHardDelete} className="flex-1 py-2 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600">Yes, delete</button>
+              <button onClick={() => setPendingHardDelete(null)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {/* Search */}
@@ -241,7 +301,7 @@ export default function ProductsPage() {
                       <Pencil size={15}/>
                     </button>
                     {p.is_active ? (
-                      <button onClick={()=>handleArchive(p)}
+                      <button onClick={()=>setPendingArchive(p)}
                         title="Archive (hide from website)"
                         className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-500 transition">
                         <Archive size={15}/>
@@ -327,11 +387,139 @@ export default function ProductsPage() {
                     onChange={e=>setForm(p=>({...p,description:e.target.value}))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"/>
                 </div>
+                {/* ── Size Variants ── */}
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
-                  <input type="file" accept="image/*" onChange={e=>setImage(e.target.files[0])}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"/>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Size / Quantity Variants
+                      <span className="ml-1 text-xs text-gray-400 font-normal">(e.g. 250ml, 500ml, 1L)</span>
+                    </label>
+                    <button type="button"
+                      onClick={() => setForm(p => ({ ...p, variants: [...(p.variants||[]), { label:'', price:'', stock:'' }] }))}
+                      className="flex items-center gap-1 text-xs font-semibold text-forest-600 hover:text-forest-800 bg-forest-50 hover:bg-forest-100 px-2.5 py-1.5 rounded-lg transition">
+                      <Plus size={12}/> Add Size
+                    </button>
+                  </div>
+                  {(form.variants||[]).length === 0 ? (
+                    <p className="text-xs text-gray-400 bg-gray-50 rounded-xl px-3 py-2.5">
+                      No variants — product sold in a single size. Add sizes above to let customers choose.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-gray-400 px-1">
+                        <span>Label (size)</span><span>Price (₹)</span><span>Stock</span><span/>
+                      </div>
+                      {(form.variants||[]).map((v, i) => (
+                        <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                          <input
+                            value={v.label} placeholder="e.g. 500ml"
+                            onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],label:e.target.value}; return {...p,variants:vs} })}
+                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                          <input
+                            type="number" min="0" step="0.01" value={v.price} placeholder="₹"
+                            onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],price:e.target.value}; return {...p,variants:vs} })}
+                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                          <input
+                            type="number" min="0" value={v.stock} placeholder="qty"
+                            onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],stock:e.target.value}; return {...p,variants:vs} })}
+                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                          <button type="button"
+                            onClick={() => setForm(p => ({ ...p, variants: p.variants.filter((_,j)=>j!==i) }))}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(form.variants||[]).length > 0 && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-2">
+                      When variants are set, the base Price & Stock above are used as fallback only.
+                    </p>
+                  )}
                 </div>
+
+                {/* ── Images ── */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Photos</label>
+
+                  {/* Existing cover image */}
+                  {form.coverImageUrl && (
+                    <div className="mb-2">
+                      <p className="text-xs text-gray-400 mb-1">Cover photo</p>
+                      <div className="relative inline-block">
+                        <img src={form.coverImageUrl.startsWith('http') ? form.coverImageUrl : `${baseUrl}${form.coverImageUrl}`} alt="cover"
+                          className="w-20 h-20 rounded-xl object-cover border border-gray-200"/>
+                        <button type="button"
+                          onClick={() => setForm(p => ({ ...p, coverImageUrl: null }))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition">
+                          <X size={10}/>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!form.coverImageUrl && (
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">Cover photo {editing ? '(upload to replace)' : ''}</label>
+                      <input type="file" accept="image/*"
+                        onChange={e => { const f = e.target.files[0]; if (f) setImage(f) }}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"/>
+                      {image && (
+                        <div className="relative inline-block mt-2">
+                          <img src={URL.createObjectURL(image)} alt="new cover preview"
+                            className="w-20 h-20 rounded-xl object-cover border-2 border-forest-400"/>
+                          <button type="button" onClick={() => setImage(null)}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition">
+                            <X size={10}/>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Existing gallery images */}
+                  {(form.existingImages||[]).length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs text-gray-400 mb-1">Gallery photos (click ✕ to remove)</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {(form.existingImages||[]).map((url, i) => (
+                          <div key={i} className="relative">
+                            <img src={url.startsWith('http') ? url : `${baseUrl}${url}`} alt=""
+                              className="w-16 h-16 rounded-xl object-cover border border-gray-200"/>
+                            <button type="button"
+                              onClick={() => setForm(p => ({ ...p, existingImages: p.existingImages.filter((_,j)=>j!==i) }))}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition">
+                              <X size={10}/>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload new gallery images */}
+                  <label className="flex items-center gap-2 border-2 border-dashed border-gray-200 rounded-xl px-3 py-3 cursor-pointer hover:border-forest-400 hover:bg-forest-50/30 transition">
+                    <ImagePlus size={16} className="text-gray-400"/>
+                    <span className="text-sm text-gray-500">Add more photos (up to 10)</span>
+                    <input type="file" accept="image/*" multiple className="hidden"
+                      onChange={e => setNewGalleryImages(prev => [...prev, ...Array.from(e.target.files)])}/>
+                  </label>
+                  {newGalleryImages.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      {newGalleryImages.map((f,i) => (
+                        <div key={i} className="relative">
+                          <img src={URL.createObjectURL(f)} alt="" className="w-16 h-16 rounded-xl object-cover border border-gray-200"/>
+                          <button type="button"
+                            onClick={() => setNewGalleryImages(prev => prev.filter((_,j)=>j!==i))}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition">
+                            <X size={10}/>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="col-span-2 flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={form.is_active}
@@ -368,7 +556,7 @@ export default function ProductsPage() {
                   onClick={() => {
                     const prod = products.find(p => p.id === editing) || { id: editing, name: 'this product' }
                     setShowModal(false)
-                    handleHardDelete(prod)
+                    setPendingHardDelete(prod)
                   }}
                   className="w-full py-2 text-sm font-semibold text-red-600 border border-red-300 rounded-lg hover:bg-red-100 transition"
                 >

@@ -39,8 +39,8 @@ export default function AnalyticsPage() {
         analyticsAPI.getCategories(),
         analyticsAPI.getDashboard(),
       ])
-      setSales(s.data)
-      setCategories(c.data)
+      setSales(Array.isArray(s.data) ? s.data : [])
+      setCategories(Array.isArray(c.data) ? c.data : [])
       setDashboard(d.data)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }

@@ -39,8 +39,9 @@ export default function LoginPage() {
   function validateLogin() {
     const errs = {}
     const id = form.email.trim()
-    if (!id) errs.email = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(id)) errs.email = 'Enter a valid email address'
+    if (!id) errs.email = 'Email or phone number is required'
+    else if (!/\S+@\S+\.\S+/.test(id) && !/^\d{10}$/.test(id.replace(/\D/g, '')))
+      errs.email = 'Enter a valid email address or 10-digit phone number'
     if (!form.password) errs.password = 'Password is required'
     return errs
   }
@@ -166,9 +167,9 @@ export default function LoginPage() {
             )}
 
             <AuthField
-              label="Email Address"
-              type="email"
-              placeholder="you@example.com"
+              label={tab === 'login' ? 'Email or Phone Number' : 'Email Address'}
+              type={tab === 'login' ? 'text' : 'email'}
+              placeholder={tab === 'login' ? 'you@example.com or 9876543210' : 'you@example.com'}
               value={form.email}
               onChange={(v) => update('email', v)}
               error={errors.email}

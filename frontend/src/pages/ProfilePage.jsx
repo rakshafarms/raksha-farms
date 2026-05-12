@@ -64,7 +64,8 @@ function FreqPill({ freq }) {
 
 export default function ProfilePage() {
   const { user, logout, isLoggedIn } = useAuth()
-  const { orders }   = useOrders()
+  const { getOrdersByUser } = useOrders()
+  const orders = getOrdersByUser(user?.email)
   const { wishlist } = useWishlist()
   const { addresses, addAddress, updateAddress, deleteAddress } = useAddresses()
   const { addToast } = useToast()
@@ -322,7 +323,7 @@ export default function ProfilePage() {
                     <StatusBadge status={order.status} />
                   </div>
                   <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="text-right flex-shrink-0 flex items-center gap-2">
                   <p className="font-bold text-forest-500">₹{order.total}</p>

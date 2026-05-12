@@ -5,6 +5,8 @@ import { useCart } from '../context/CartContext'
 import { useWishlist } from '../context/WishlistContext'
 import { useToast } from '../context/ToastContext'
 import ProductCard from '../components/ProductCard'
+import RecentlyViewedItems, { rememberProductView } from '../components/RecentlyViewedItems'
+import { ProductDetailSkeleton } from '../components/ProductSkeleton'
 import SubscriptionSheet from '../components/SubscriptionSheet'
 
 function Stars({ rating }) {
@@ -22,7 +24,7 @@ function Stars({ rating }) {
 export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { products } = useProducts()
+  const { products, loading } = useProducts()
   const { cart, addToCart, updateQuantity, openDrawer } = useCart()
   const { isWishlisted, toggleWishlist } = useWishlist()
   const { addToast } = useToast()
@@ -44,6 +46,12 @@ export default function ProductPage() {
   const [qty, setQty] = useState(1)
   const [showSubSheet, setShowSubSheet] = useState(false)
   const [imgError, setImgError] = useState(false)
+  // Image gallery: collect cover + extra images
+  const allImages = [
+    ...(product?.image && !imgError ? [product.image] : []),
+    ...(product?.images || []),
+  ].filter(Boolean)
+  const [activeImg, setActiveImg] = useState(0)
 
   const activePrice  = selectedVariant?.price ?? product?.price
   const offerPrice   = !selectedVariant && product?.offer_price ? Number(product.offer_price) : null
@@ -61,7 +69,12 @@ export default function ProductPage() {
       .slice(0, 4)
   }, [product, products])
 
+  useEffect(() => {
+    if (product) rememberProductView(product.id)
+  }, [product])
+
   if (!product) {
+    if (loading) return <ProductDetailSkeleton />
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center text-center px-4 page-enter">
         <p className="text-6xl mb-4">🌿</p>
@@ -94,33 +107,99 @@ export default function ProductPage() {
       </nav>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-        {/* Image */}
-        <div className="relative">
-          <div className="aspect-square rounded-3xl overflow-hidden bg-sage-50 shadow-soft">
-            {product.image && !imgError ? (
-              <img src={product.image} alt={product.name} className="w-full h-full object-cover" loading="lazy" onError={() => setImgError(true)} />
+        {/* ── Image Gallery (Swiggy-style) ── */}
+        <div className="relative select-none">
+
+          {/* Main image */}
+          <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50 shadow-soft">
+            {allImages.length > 0 ? (
+              <img
+                key={activeImg}
+                src={allImages[activeImg]}
+                alt={product.name}
+                className="w-full h-full object-contain p-4 transition-opacity duration-200"
+                loading="lazy"
+                onError={() => { setImgError(true); if (activeImg > 0) setActiveImg(0) }}
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-8xl">{product.emoji || '🌿'}</div>
             )}
+
+            {/* Left / Right arrows — only when multiple images */}
+            {allImages.length > 1 && (
+              <>
+                <button
+                  onClick={() => setActiveImg(i => (i - 1 + allImages.length) % allImages.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow-md flex items-center justify-center hover:bg-white transition"
+                >
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setActiveImg(i => (i + 1) % allImages.length)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full shadow-md flex items-center justify-center hover:bg-white transition"
+                >
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              </>
+            )}
+
+            {/* Dot indicators */}
+            {allImages.length > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {allImages.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImg(i)}
+                    className={`rounded-full transition-all duration-200 ${
+                      activeImg === i ? 'w-4 h-1.5 bg-forest-500' : 'w-1.5 h-1.5 bg-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Badges */}
+            <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+              {isOutOfStock && <span className="badge bg-red-500 text-white text-xs">Out of Stock</span>}
+              {isLowStock   && <span className="badge bg-earth-500 text-white text-xs stock-low">Only {product.stock} left!</span>}
+              {product.featured && <span className="badge bg-earth-500 text-white text-xs">Featured</span>}
+            </div>
+
+            {/* Wishlist */}
+            <button
+              onClick={() => { toggleWishlist(product); addToast(wishlisted ? 'Removed from wishlist' : 'Added to wishlist!', wishlisted ? 'info' : 'success') }}
+              className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-all duration-200 ${
+                wishlisted ? 'bg-rose-500 text-white' : 'bg-white text-gray-400 hover:text-rose-500'
+              }`}
+            >
+              <svg className="w-4 h-4" fill={wishlisted ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </button>
           </div>
-          {/* Badges */}
-          <div className="absolute top-4 left-4 flex flex-col gap-2">
-            {isOutOfStock && <span className="badge bg-red-500 text-white">Out of Stock</span>}
-            {isLowStock   && <span className="badge bg-earth-500 text-white stock-low">Only {product.stock} left!</span>}
-            {product.featured && <span className="badge bg-earth-500 text-white">Featured</span>}
-            {product.subscriptionAvailable && <span className="badge bg-forest-500 text-white">Subscribe & Save</span>}
-          </div>
-          {/* Wishlist */}
-          <button
-            onClick={() => { toggleWishlist(product); addToast(wishlisted ? 'Removed from wishlist' : 'Added to wishlist!', wishlisted ? 'info' : 'success') }}
-            className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-soft transition-all duration-200 ${
-              wishlisted ? 'bg-rose-500 text-white' : 'bg-white text-gray-400 hover:text-rose-500'
-            }`}
-          >
-            <svg className="w-5 h-5" fill={wishlisted ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </button>
+
+          {/* Thumbnail strip below main image — scrollable */}
+          {allImages.length > 1 && (
+            <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
+              {allImages.map((src, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveImg(i)}
+                  className={`flex-shrink-0 w-[72px] h-[72px] rounded-xl overflow-hidden border-2 transition-all duration-200 bg-gray-50 ${
+                    activeImg === i
+                      ? 'border-forest-500 shadow-md scale-105'
+                      : 'border-gray-200 opacity-60 hover:opacity-100 hover:border-gray-300'
+                  }`}
+                >
+                  <img src={src} alt={`View ${i + 1}`} className="w-full h-full object-contain p-1" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Details */}
@@ -273,12 +352,13 @@ export default function ProductPage() {
       {/* Related products */}
       {related.length > 0 && (
         <section className="mt-14">
-          <h2 className="text-2xl font-bold text-gray-800 mb-5">More from {product.category}</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-5">You Might Also Like</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {related.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         </section>
       )}
+      <RecentlyViewedItems products={products} excludeId={product.id} />
     </div>
   )
 }

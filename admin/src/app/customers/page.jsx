@@ -1,7 +1,18 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { customersAPI } from '../../lib/api'
+
+function useAdminToast() {
+  const [toast, setToast] = React.useState(null)
+  const show = (msg, type = 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const el = toast ? (
+    <div className={`fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      {toast.msg}
+    </div>
+  ) : null
+  return { show, el }
+}
 import {
   Search, UserCheck, UserX, X, ShoppingBag,
   Phone, Mail, Calendar, TrendingUp, Users, Shield, Ban
@@ -148,6 +159,7 @@ function OrderDrawer({ customer, onClose }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function CustomersPage() {
+  const { show: showToast, el: toastEl } = useAdminToast()
   const [customers, setCustomers] = useState([])
   const [total, setTotal]         = useState(0)
   const [pages, setPages]         = useState(1)
@@ -187,11 +199,12 @@ export default function CustomersPage() {
       const { data } = await customersAPI.toggle(id)
       setCustomers(prev => prev.map(c => c.id === id ? { ...c, is_active: data.is_active } : c))
       if (drawer?.id === id) setDrawer(prev => ({ ...prev, is_active: data.is_active }))
-    } catch { alert('Action failed') }
+    } catch { showToast('Action failed') }
   }
 
   return (
     <AdminLayout title="Customers">
+      {toastEl}
       {drawer && <OrderDrawer customer={drawer} onClose={() => setDrawer(null)}/>}
 
       {/* ── Stats ── */}

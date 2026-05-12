@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Warehouse,
-  Users, Tag, RefreshCw, BarChart2, Settings, LogOut, Leaf, Grid3X3, X
+  Users, Tag, RefreshCw, BarChart2, Settings, LogOut, Leaf, Grid3X3, X,
+  ChevronLeft, ChevronRight
 } from 'lucide-react'
 import Cookies from 'js-cookie'
 
@@ -21,7 +22,7 @@ const nav = [
   { label:'Settings',      href:'/settings',              icon: Settings },
 ]
 
-export default function Sidebar({ mobileOpen = true, onClose }) {
+export default function Sidebar({ mobileOpen = true, onClose, collapsed = false, onToggleCollapse }) {
   const path = usePathname()
   function logout() {
     Cookies.remove('admin_token')
@@ -47,20 +48,27 @@ export default function Sidebar({ mobileOpen = true, onClose }) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 w-64 bg-[#1B4332] text-white flex flex-col z-50
-        transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 ${collapsed ? 'md:w-20' : 'md:w-64'} w-64 bg-[#1B4332] text-white flex flex-col z-50
+        transition-all duration-300 ease-in-out
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
         md:translate-x-0
       `}>
         {/* Logo + Close button */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+        <div className={`flex items-center gap-3 ${collapsed ? 'md:px-4' : 'md:px-6'} px-6 py-5 border-b border-white/10`}>
           <div className="w-9 h-9 bg-[#D97706] rounded-xl flex items-center justify-center flex-shrink-0">
             <Leaf size={18} className="text-white" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className={`flex-1 min-w-0 ${collapsed ? 'md:hidden' : ''}`}>
             <p className="font-bold text-base leading-none">Raksha Farms</p>
             <p className="text-xs text-green-300 mt-0.5">Admin Panel</p>
           </div>
+          <button
+            onClick={onToggleCollapse}
+            className="hidden md:flex p-1.5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ChevronRight size={18} className="text-white/80" /> : <ChevronLeft size={18} className="text-white/80" />}
+          </button>
           {/* Close button — visible only on mobile */}
           <button
             onClick={onClose}
@@ -77,10 +85,11 @@ export default function Sidebar({ mobileOpen = true, onClose }) {
             const active = path === href || (href !== '/' && path.startsWith(href))
             return (
               <Link key={href} href={href} onClick={handleLinkClick}
-                className={`flex items-center gap-3 px-6 py-2.5 text-sm font-medium transition-colors mx-2 rounded-lg mb-0.5
+                title={collapsed ? label : undefined}
+                className={`flex items-center gap-3 ${collapsed ? 'md:justify-center md:px-0' : 'md:px-6'} px-6 py-2.5 text-sm font-medium transition-colors mx-2 rounded-lg mb-0.5
                   ${active ? 'bg-white/15 text-white' : 'text-green-200 hover:bg-white/10 hover:text-white'}`}>
                 <Icon size={18} />
-                {label}
+                <span className={collapsed ? 'md:hidden' : ''}>{label}</span>
               </Link>
             )
           })}
@@ -89,8 +98,9 @@ export default function Sidebar({ mobileOpen = true, onClose }) {
         {/* Logout */}
         <div className="p-4 border-t border-white/10">
           <button onClick={logout}
-            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-300 hover:bg-white/10 rounded-lg transition-colors">
-            <LogOut size={18} /> Sign Out
+            title={collapsed ? 'Sign Out' : undefined}
+            className={`flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-300 hover:bg-white/10 rounded-lg transition-colors ${collapsed ? 'md:justify-center' : ''}`}>
+            <LogOut size={18} /> <span className={collapsed ? 'md:hidden' : ''}>Sign Out</span>
           </button>
         </div>
       </aside>

@@ -53,16 +53,46 @@ export async function getProduct(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
+// Helper: extract uploaded file URLs from req.files (fields) or req.file (single)
+function extractImageUrls(req) {
+  // Cover image (field name "image")
+  const coverFile = req.files?.image?.[0] || req.file
+  const image_url = coverFile ? `/uploads/${coverFile.filename}` : undefined
+  // Gallery images (field name "images")
+  const galleryFiles = req.files?.images || []
+  const newGalleryUrls = galleryFiles.map(f => `/uploads/${f.filename}`)
+  return { image_url, newGalleryUrls }
+}
+
+// Parse variants safely from FormData string or array
+function parseVariants(raw) {
+  if (raw === undefined || raw === null) return undefined
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch { return [] }
+  }
+  return []
+}
+
 export async function createProduct(req, res) {
   try {
     const { name, category, description, price, offer_price, stock, unit, variants, is_featured } = req.body
-    const image_url = req.file ? `/uploads/${req.file.filename}` : null
-    const offerVal  = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
+    if (!name || !category || price === undefined || stock === undefined)
+      return res.status(400).json({ error: 'name, category, price, and stock are required' })
+    const priceNum = Number(price); const stockNum = parseInt(stock, 10)
+    if (isNaN(priceNum) || priceNum < 0) return res.status(400).json({ error: 'price must be a non-negative number' })
+    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative integer' })
+
+    const { image_url, newGalleryUrls } = extractImageUrls(req)
+    const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
+    const parsedVars  = parseVariants(variants) || []
+    const imagesArr   = newGalleryUrls  // new product starts with empty gallery + newly uploaded
+
     const { rows } = await query(
-      `INSERT INTO products (name, category, description, price, offer_price, stock, unit, image_url, variants, is_featured)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [name, category, description, price, offerVal, stock, unit, image_url,
-       JSON.stringify(variants || []), is_featured || false]
+      `INSERT INTO products (name, category, description, price, offer_price, stock, unit, image_url, variants, images, is_featured)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [name, category, description, priceNum, offerVal, stockNum, unit,
+       image_url || null, JSON.stringify(parsedVars), JSON.stringify(imagesArr), is_featured || false]
     )
     res.status(201).json(rows[0])
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -70,29 +100,44 @@ export async function createProduct(req, res) {
 
 export async function updateProduct(req, res) {
   try {
-    const { name, category, description, price, offer_price, stock, unit, is_active, is_featured, variants } = req.body
-    const image_url   = req.file ? `/uploads/${req.file.filename}` : undefined
+    const { name, category, description, price, offer_price, stock, unit,
+            is_active, is_featured, variants, existing_images, remove_image } = req.body
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
     const activeVal   = is_active === true || is_active === 'true'
     const featuredVal = is_featured === true || is_featured === 'true'
 
-    const { rows: existing } = await query('SELECT id FROM products WHERE id=$1', [req.params.id])
+    const { rows: existing } = await query('SELECT id, image_url, images FROM products WHERE id=$1', [req.params.id])
     if (!existing[0]) return res.status(404).json({ error: 'Product not found' })
+
+    const { image_url: newCover, newGalleryUrls } = extractImageUrls(req)
+
+    // Cover image: use new upload, or keep existing (unless admin explicitly removes it)
+    const coverUrl = newCover
+      ? newCover
+      : (remove_image === 'true' ? null : existing[0].image_url)
+
+    // Gallery images: start from what admin says still exists, then append new uploads
+    let keptImages = []
+    if (existing_images !== undefined) {
+      try { keptImages = JSON.parse(existing_images) } catch { keptImages = [] }
+    } else {
+      // If not sent, keep all existing gallery images
+      try { keptImages = JSON.parse(existing[0].images || '[]') } catch { keptImages = [] }
+    }
+    const finalImages = [...keptImages, ...newGalleryUrls]
 
     const sets = [
       `name=$1`, `category=$2`, `description=$3`, `price=$4`,
       `stock=$5`, `unit=$6`, `is_active=$7`, `is_featured=$8`,
-      `offer_price=$9`, `updated_at=NOW()`
+      `offer_price=$9`, `image_url=$10`, `images=$11`, `updated_at=NOW()`
     ]
-    const vals = [name, category, description, price, stock, unit, activeVal, featuredVal, offerVal]
-    if (image_url) { sets.push(`image_url=$${vals.length + 1}`); vals.push(image_url) }
-    // variants only updated when explicitly provided (FormData strings come as JSON)
-    if (variants !== undefined) {
-      let parsed = variants
-      if (typeof variants === 'string') {
-        try { parsed = JSON.parse(variants) } catch { parsed = [] }
-      }
-      sets.push(`variants=$${vals.length + 1}`); vals.push(JSON.stringify(parsed || []))
+    const vals = [name, category, description, price, stock, unit,
+                  activeVal, featuredVal, offerVal, coverUrl, JSON.stringify(finalImages)]
+
+    // variants only updated when explicitly provided
+    const parsedVars = parseVariants(variants)
+    if (parsedVars !== undefined) {
+      sets.push(`variants=$${vals.length + 1}`); vals.push(JSON.stringify(parsedVars))
     }
 
     const { rows } = await query(
@@ -127,19 +172,21 @@ export async function hardDeleteProduct(req, res) {
 export async function updateStock(req, res) {
   try {
     const { stock, reason } = req.body
+    const stockNum = parseInt(stock, 10)
+    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative integer' })
     const { rows: prod } = await query('SELECT stock, name FROM products WHERE id=$1', [req.params.id])
     if (!prod[0]) return res.status(404).json({ error: 'Product not found' })
-    const change = stock - prod[0].stock
-    await query('UPDATE products SET stock=$1, updated_at=NOW() WHERE id=$2', [stock, req.params.id])
+    const change = stockNum - prod[0].stock
+    await query('UPDATE products SET stock=$1, updated_at=NOW() WHERE id=$2', [stockNum, req.params.id])
     await query('INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,$3)',
       [req.params.id, change, reason || 'Manual update']).catch(() => {})
-    res.json({ message: 'Stock updated', stock })
+    res.json({ message: 'Stock updated', stock: stockNum })
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
 export async function getLowStock(req, res) {
   try {
-    const threshold = req.query.threshold || 10
+    const threshold = parseInt(req.query.threshold, 10) || 10
     const { rows } = await query(
       'SELECT id, name, category, stock, unit FROM products WHERE stock <= $1 AND is_active=true ORDER BY stock ASC',
       [threshold]

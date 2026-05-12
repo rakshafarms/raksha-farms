@@ -6,6 +6,8 @@ const api = axios.create({
   timeout: 15000,
 })
 
+export const API_BASE_URL = api.defaults.baseURL
+
 // Attach token to every request
 api.interceptors.request.use((config) => {
   const token = Cookies.get('admin_token') ||
@@ -53,6 +55,7 @@ export const ordersAPI = {
   getOne: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, status, extras = {}) => api.patch(`/orders/${id}/status`, { status, ...extras }),
   getStats: () => api.get('/orders/stats'),
+  eventsUrl: () => `${API_BASE_URL}/orders/events`,
 }
 
 // ── Analytics ─────────────────────────────────────────

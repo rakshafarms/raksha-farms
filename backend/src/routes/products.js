@@ -5,7 +5,7 @@ import {
   updateStock, getLowStock
 } from '../controllers/productsController.js'
 import { adminOnly } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { uploadProductImages } from '../middleware/upload.js'
 
 const r = Router()
 
@@ -16,8 +16,8 @@ r.get('/admin/all',       ...adminOnly, getProductsAdmin)      // all products, 
 
 // Param routes — after all named routes
 r.get('/:id',             getProduct)
-r.post('/',               ...adminOnly, upload.single('image'), createProduct)
-r.put('/:id',             ...adminOnly, upload.single('image'), updateProduct)
+r.post('/',               ...adminOnly, uploadProductImages, createProduct)
+r.put('/:id',             ...adminOnly, uploadProductImages, updateProduct)
 r.patch('/:id/stock',     ...adminOnly, updateStock)
 r.delete('/:id',          ...adminOnly, deleteProduct)         // soft delete (archive)
 r.delete('/:id/hard',     ...adminOnly, hardDeleteProduct)     // permanent delete

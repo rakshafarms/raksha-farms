@@ -38,6 +38,10 @@ async function migrate() {
       )
     `)
 
+    // Add columns that may be missing from older installs
+    await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS offer_price DECIMAL(10,2)`)
+    await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'`)
+
     // Orders
     await query(`
       CREATE TABLE IF NOT EXISTS orders (

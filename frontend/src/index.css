@@ -108,6 +108,22 @@
   animation: cardSlideIn 0.4s ease-out both;
 }
 
+/* ── Loading and cart micro-interactions ── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.52; }
+  50%      { opacity: 1; }
+}
+.skeleton-pulse { animation: skeletonPulse 1.15s ease-in-out infinite; }
+
+@keyframes cartBump {
+  0%, 100% { transform: translateX(0) rotate(0deg) scale(1); }
+  20%      { transform: translateX(-2px) rotate(-4deg) scale(1.05); }
+  40%      { transform: translateX(2px) rotate(4deg) scale(1.06); }
+  60%      { transform: translateX(-1px) rotate(-2deg) scale(1.03); }
+  80%      { transform: translateX(1px) rotate(2deg) scale(1.01); }
+}
+.cart-bump { animation: cartBump 0.55s ease-out; }
+
 /* ── Scroll reveal ── */
 .reveal {
   opacity: 0;

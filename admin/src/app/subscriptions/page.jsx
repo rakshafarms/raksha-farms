@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { subscriptionsAPI } from '../../lib/api'
 import {
@@ -59,6 +59,17 @@ function parseCustomSchedule(notes) {
     const p = typeof notes === 'string' ? JSON.parse(notes) : notes
     return p?.custom_schedule || null
   } catch { return null }
+}
+
+function useAdminToast() {
+  const [toast, setToast] = React.useState(null)
+  const show = (msg, type = 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const el = toast ? (
+    <div className={`fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      {toast.msg}
+    </div>
+  ) : null
+  return { show, el }
 }
 
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -144,11 +155,13 @@ function CustomScheduleGrid({ schedule }) {
 
 // ── Detail Drawer ─────────────────────────────────────────────────────────────
 function DetailDrawer({ subId, onClose, onRefresh }) {
+  const { show: showToast, el: toastEl } = useAdminToast()
   const [detail, setDetail]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [form, setForm]       = useState({})
   const [busy, setBusy]       = useState(false)
+  const [pendingAction, setPendingAction] = useState(null) // { fn, label }
 
   useEffect(() => {
     if (!subId) return
@@ -174,20 +187,24 @@ function DetailDrawer({ subId, onClose, onRefresh }) {
       setDetail(r.data)
       setEditing(false)
       onRefresh()
-    } catch { alert('Save failed') }
+    } catch { showToast('Save failed') }
     finally { setBusy(false) }
   }
 
-  async function action(fn, label) {
-    if (!confirm(`${label}?`)) return
+  async function runAction(fn, label) {
     setBusy(true)
+    setPendingAction(null)
     try {
       await fn()
       const r = await subscriptionsAPI.getDetail(subId)
       setDetail(r.data)
       onRefresh()
-    } catch { alert(`Failed: ${label}`) }
+    } catch { showToast(`Failed: ${label}`) }
     finally { setBusy(false) }
+  }
+
+  function action(fn, label) {
+    setPendingAction({ fn, label })
   }
 
   const items         = detail ? safeItems(detail.items) : []
@@ -197,6 +214,23 @@ function DetailDrawer({ subId, onClose, onRefresh }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
+      {toastEl}
+
+      {/* Inline action confirm */}
+      {pendingAction && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-xs w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-4">{pendingAction.label}?</p>
+            <div className="flex gap-3">
+              <button onClick={() => runAction(pendingAction.fn, pendingAction.label)}
+                className="flex-1 py-2 bg-[#1B4332] text-white rounded-xl font-medium text-sm hover:bg-[#163826]">Yes</button>
+              <button onClick={() => setPendingAction(null)}
+                className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose}/>
       <div className="relative w-full max-w-[420px] bg-white h-full shadow-2xl flex flex-col">
 
@@ -521,6 +555,7 @@ function SubRow({ s, onView, onQuickAction, busy }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function SubscriptionsPage() {
+  const { show: showToast, el: toastEl } = useAdminToast()
   const [tab, setTab]               = useState('today')
   const [dashboard, setDashboard]   = useState(null)
   const [calendar, setCalendar]     = useState({})
@@ -531,6 +566,7 @@ export default function SubscriptionsPage() {
   const [generating, setGenerating] = useState(false)
   const [genDate, setGenDate]       = useState(todayStr())
   const [showGenPanel, setShowGenPanel] = useState(false)
+  const [pendingGen, setPendingGen] = useState(false) // confirm before generate
   const [drawerSub, setDrawerSub]   = useState(null)
   const [busy, setBusy]             = useState(null)
   const [search, setSearch]         = useState('')
@@ -562,21 +598,20 @@ export default function SubscriptionsPage() {
   useEffect(() => { if (tab === 'calendar') fetchCalendar() }, [calFrom, calTo, tab])
 
   async function handleGenerate() {
-    if (!confirm(`Generate orders for all subscriptions due on ${genDate}?`)) return
+    setPendingGen(false)
     setGenerating(true)
     try {
       const r = await subscriptionsAPI.generateOrders(genDate)
-      alert(`✅ Generated ${r.data.generated} order(s) for ${genDate}`)
+      showToast(`Generated ${r.data.generated} order(s) for ${genDate}`, 'success')
       fetchAll()
-    } catch (e) { alert(e.response?.data?.error || 'Failed to generate orders') }
+    } catch (e) { showToast(e.response?.data?.error || 'Failed to generate orders') }
     finally { setGenerating(false) }
   }
 
   async function quickAction(id, fn, label) {
-    if (!confirm(`${label}?`)) return
     setBusy(id)
     try { await fn(); await fetchAll() }
-    catch { alert(`Failed: ${label}`) }
+    catch { showToast(`Failed: ${label}`) }
     finally { setBusy(null) }
   }
 
@@ -607,6 +642,21 @@ export default function SubscriptionsPage() {
 
   return (
     <AdminLayout title="Subscriptions">
+      {toastEl}
+
+      {/* Generate orders confirm */}
+      {pendingGen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-1">Generate orders for {genDate}?</p>
+            <p className="text-sm text-gray-400 mb-4">This will create orders for all active subscriptions due on that date.</p>
+            <div className="flex gap-3">
+              <button onClick={handleGenerate} className="flex-1 py-2 bg-[#1B4332] text-white rounded-xl font-medium text-sm hover:bg-[#163826]">Yes, generate</button>
+              <button onClick={() => setPendingGen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Top bar: stats + refresh ─────────────────────── */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -639,7 +689,7 @@ export default function SubscriptionsPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <input type="date" value={genDate} onChange={e => setGenDate(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] bg-white"/>
-            <button onClick={handleGenerate} disabled={generating}
+            <button onClick={() => setPendingGen(true)} disabled={generating}
               className="flex items-center gap-2 bg-[#1B4332] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#163826] disabled:opacity-50 transition">
               <Zap size={14}/> {generating ? 'Generating…' : 'Run Now'}
             </button>

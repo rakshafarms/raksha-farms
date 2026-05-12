@@ -23,6 +23,7 @@ export default function AdminLayout({ children, title }) {
 
   // Sidebar mobile state
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // Order notifications
   const [newOrders, setNewOrders]     = useState([])
@@ -35,6 +36,7 @@ export default function AdminLayout({ children, title }) {
   // Bell dropdown
   const [open, setOpen]   = useState(false)
   const [tab, setTab]     = useState('orders') // 'orders' | 'stock'
+  const [liveNotice, setLiveNotice] = useState(null)
   const bellRef           = useRef(null)
 
   useEffect(() => {
@@ -45,6 +47,18 @@ export default function AdminLayout({ children, title }) {
       setUser(payload)
     } catch { router.replace('/login') }
   }, [])
+
+  useEffect(() => {
+    try { setSidebarCollapsed(localStorage.getItem('rf_admin_sidebar_collapsed') === '1') } catch {}
+  }, [])
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed(v => {
+      const next = !v
+      try { localStorage.setItem('rf_admin_sidebar_collapsed', next ? '1' : '0') } catch {}
+      return next
+    })
+  }
 
   // Poll orders every 30s
   const fetchOrders = useCallback(async () => {
@@ -76,6 +90,39 @@ export default function AdminLayout({ children, title }) {
     const t2 = setInterval(fetchLowStock, 300_000)
     return () => { clearInterval(t1); clearInterval(t2) }
   }, [user, fetchOrders, fetchLowStock])
+
+  useEffect(() => {
+    if (!user || typeof EventSource === 'undefined') return
+    const source = new EventSource(ordersAPI.eventsUrl(), { withCredentials: true })
+
+    source.addEventListener('order_created', (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+        const order = payload.order
+        const addr = typeof order.address === 'string' ? JSON.parse(order.address || '{}') : (order.address || {})
+        const name = order.customer_name || addr.name || 'Guest'
+        setNewOrders(prev => [order, ...prev.filter(o => o.id !== order.id)].slice(0, 10))
+        setUnreadOrders(n => n + 1)
+        setTab('orders')
+        setLiveNotice({ title: 'New order received', text: `${name} placed an order for ₹${Number(order.total || 0).toLocaleString('en-IN')}` })
+        window.setTimeout(() => setLiveNotice(null), 6500)
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext
+          const ctx = new AudioCtx()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.frequency.value = 880
+          gain.gain.value = 0.04
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start()
+          osc.stop(ctx.currentTime + 0.16)
+        } catch {}
+      } catch {}
+    })
+
+    return () => source.close()
+  }, [user])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -116,10 +163,15 @@ export default function AdminLayout({ children, title }) {
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        mobileOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapsed}
+      />
 
       {/* Main content — offset by sidebar width on md+ */}
-      <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
+      <div className={`flex-1 ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} flex flex-col min-h-screen transition-all duration-300`}>
 
         {/* Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between gap-3">
@@ -289,6 +341,15 @@ export default function AdminLayout({ children, title }) {
         {/* Page content */}
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
+      {liveNotice && (
+        <button
+          onClick={goToOrders}
+          className="fixed right-5 bottom-5 z-[100] w-80 max-w-[calc(100vw-2.5rem)] rounded-2xl bg-[#1B4332] text-white shadow-2xl p-4 text-left hover:bg-[#15362a] transition-colors"
+        >
+          <p className="text-sm font-bold">{liveNotice.title}</p>
+          <p className="text-xs text-green-100 mt-1">{liveNotice.text}</p>
+        </button>
+      )}
     </div>
   )
 }

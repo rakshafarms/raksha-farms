@@ -370,15 +370,15 @@ export default function OrderTrackingPage() {
         <div className="space-y-2 text-sm mb-4">
           <div className="flex gap-2">
             <span className="text-gray-400 w-16 flex-shrink-0">Name</span>
-            <span className="font-medium text-gray-700">{order.customer.name}</span>
+            <span className="font-medium text-gray-700">{order.customer?.name}</span>
           </div>
           <div className="flex gap-2">
             <span className="text-gray-400 w-16 flex-shrink-0">Phone</span>
-            <span className="font-medium text-gray-700">+91 {order.customer.phone}</span>
+            <span className="font-medium text-gray-700">+91 {order.customer?.phone}</span>
           </div>
           <div className="flex gap-2">
             <span className="text-gray-400 w-16 flex-shrink-0">Address</span>
-            <span className="font-medium text-gray-700">{order.customer.address}</span>
+            <span className="font-medium text-gray-700">{order.customer?.address}</span>
           </div>
           {order.deliverySlot && (
             <div className="flex gap-2">

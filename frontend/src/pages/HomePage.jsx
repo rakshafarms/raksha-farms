@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import HeroSection from '../components/HeroSection'
 import WhyChooseUs from '../components/WhyChooseUs'
 import HowItWorks from '../components/HowItWorks'
@@ -7,6 +7,8 @@ import ReviewsSection from '../components/ReviewsSection'
 import ProductCard from '../components/ProductCard'
 import TrustBadges from '../components/TrustBadges'
 import FreeDeliveryBar from '../components/FreeDeliveryBar'
+import RecentlyViewedItems from '../components/RecentlyViewedItems'
+import { ProductCardSkeleton } from '../components/ProductSkeleton'
 import { useProducts } from '../context/ProductsContext'
 import { CATEGORIES as FALLBACK_CATEGORIES } from '../data/products2'
 import { useScrollReveal } from '../hooks/useScrollReveal'
@@ -20,7 +22,7 @@ function catColor(hex) {
 
 export default function HomePage() {
   useScrollReveal()
-  const { products } = useProducts()
+  const { products, loading } = useProducts()
   const [searchParams, setSearchParams] = useSearchParams()
   const [backendCats, setBackendCats] = useState(null) // null = not loaded yet
 
@@ -51,6 +53,7 @@ export default function HomePage() {
     }
   }, [searchParams, setSearchParams])
   const [searchQuery, setSearchQuery]       = useState('')
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [sortBy, setSortBy]                 = useState('default')
 
   const filteredProducts = useMemo(() => {
@@ -83,6 +86,23 @@ export default function HomePage() {
     products.forEach((p) => { counts[p.category] = (counts[p.category] || 0) + 1 })
     return counts
   }, [products])
+
+  const searchSuggestions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return { products: [], categories: [] }
+    return {
+      products: products
+        .filter((p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q)
+        )
+        .slice(0, 6),
+      categories: CATEGORIES
+        .filter((cat) => cat.id !== 'all' && cat.label.toLowerCase().includes(q))
+        .slice(0, 4),
+    }
+  }, [products, CATEGORIES, searchQuery])
 
   function selectCategory(id) {
     setActiveCategory(id)
@@ -174,9 +194,53 @@ export default function HomePage() {
                 type="text"
                 placeholder="Search vegetables, fruits, oils, millets..."
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value) }}
+                onFocus={() => setSuggestionsOpen(true)}
+                onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 120)}
+                onChange={(e) => { setSearchQuery(e.target.value); setSuggestionsOpen(true) }}
                 className="input-field pl-10"
               />
+              {suggestionsOpen && searchQuery.trim() && (
+                <div className="absolute left-0 right-0 top-full mt-2 z-30 bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+                  {searchSuggestions.products.length === 0 && searchSuggestions.categories.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500">No matching products or categories</div>
+                  ) : (
+                    <>
+                      {searchSuggestions.products.map((product) => (
+                        <Link
+                          key={product.id}
+                          to={`/product/${product.id}`}
+                          onClick={() => setSuggestionsOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-sage-50 transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-sage-50 overflow-hidden flex items-center justify-center text-lg flex-shrink-0">
+                            {product.image ? <img src={product.image} alt="" className="w-full h-full object-cover" /> : (product.emoji || '🌿')}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-gray-800 truncate">{product.name}</p>
+                            <p className="text-xs text-gray-400 capitalize truncate">{product.category} · ₹{product.price}/{product.unit}</p>
+                          </div>
+                        </Link>
+                      ))}
+                      {searchSuggestions.categories.length > 0 && (
+                        <div className="border-t border-gray-100 py-1">
+                          {searchSuggestions.categories.map((cat) => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { selectCategory(cat.id); setSuggestionsOpen(false) }}
+                              className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-sage-50 transition-colors"
+                            >
+                              <span className="text-sm font-semibold text-gray-700">{cat.label}</span>
+                              <span className="text-xs text-gray-400">{categoryCounts[cat.id] || 0} items</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <select
               value={sortBy}
@@ -210,7 +274,11 @@ export default function HomePage() {
           )}
 
           {/* Product grid */}
-          {filteredProducts.length === 0 ? (
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+              {Array.from({ length: 10 }).map((_, i) => <ProductCardSkeleton key={i} />)}
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20">
               <div className="w-20 h-20 mx-auto rounded-full bg-white flex items-center justify-center mb-4 shadow-card">
                 <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -277,6 +345,7 @@ export default function HomePage() {
       <WhyChooseUs />
       <HowItWorks />
       <ReviewsSection />
+      <RecentlyViewedItems products={products} />
 
       {/* Contact CTA */}
       <section className="py-14 bg-white">

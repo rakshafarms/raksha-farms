@@ -89,6 +89,7 @@ export async function me(req, res) {
       'SELECT id, name, email, role, phone FROM users WHERE id = $1',
       [req.user.id]
     )
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' })
     res.json(rows[0])
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -108,7 +109,8 @@ export async function googleAuth(req, res) {
     if (!payload.email) return res.status(401).json({ error: 'No email in Google token' })
     // Verify the token was issued for this app (prevents tokens from other apps being used)
     const expectedAud = process.env.GOOGLE_CLIENT_ID
-    if (expectedAud && payload.aud !== expectedAud) return res.status(401).json({ error: 'Invalid Google credential' })
+    if (!expectedAud) return res.status(500).json({ error: 'Server misconfiguration: GOOGLE_CLIENT_ID not set' })
+    if (payload.aud !== expectedAud) return res.status(401).json({ error: 'Invalid Google credential' })
 
     // Find or create user
     let { rows } = await query('SELECT * FROM users WHERE email = $1', [payload.email.toLowerCase()])
@@ -132,8 +134,11 @@ export async function googleAuth(req, res) {
 export async function changePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' })
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
     const { rows } = await query('SELECT * FROM users WHERE id = $1', [req.user.id])
     const user = rows[0]
+    if (!user) return res.status(404).json({ error: 'User not found' })
     const valid = await bcrypt.compare(currentPassword, user.password)
     if (!valid) return res.status(400).json({ error: 'Current password incorrect' })
     const hashed = await bcrypt.hash(newPassword, 10)

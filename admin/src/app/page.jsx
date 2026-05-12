@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import AdminLayout from '../components/AdminLayout'
-import { analyticsAPI } from '../lib/api'
+import { analyticsAPI, productsAPI } from '../lib/api'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -9,7 +9,7 @@ import {
 import {
   ShoppingCart, IndianRupee, Users, Clock,
   TrendingUp, TrendingDown, Minus, Package,
-  ArrowRight, CheckCircle2, XCircle, Truck
+  ArrowRight, CheckCircle2, AlertTriangle
 } from 'lucide-react'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -141,13 +141,17 @@ const OrdTooltip = ({ active, payload, label }) => {
 // ─── main page ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [data, setData]     = useState(null)
+  const [lowStock, setLowStock] = useState([])
   const [loading, setLoading] = useState(true)
   const now = new Date()
   const todayLabel = now.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
 
   useEffect(() => {
-    analyticsAPI.getDashboard()
-      .then(r => setData(r.data))
+    Promise.all([
+      analyticsAPI.getDashboard().then(r => r.data),
+      productsAPI.getLowStock(5).then(r => Array.isArray(r.data) ? r.data : (r.data.products || [])).catch(() => []),
+    ])
+      .then(([dashboard, stock]) => { setData(dashboard); setLowStock(stock) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -225,6 +229,45 @@ export default function Dashboard() {
           theme={THEMES.orange}
           change={null}
         />
+      </div>
+
+      {/* ── low stock alerts ──────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-orange-50 bg-orange-50/60">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center">
+              <AlertTriangle size={18}/>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-800 text-base">Low Stock Alerts</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Items at 5 units or below, including out of stock</p>
+            </div>
+          </div>
+          <a href="/inventory" className="flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline">
+            Manage inventory <ArrowRight size={12}/>
+          </a>
+        </div>
+        {lowStock.length === 0 ? (
+          <div className="px-6 py-8 text-sm text-gray-400 flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-500"/> All products are above the low-stock threshold.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-orange-50">
+            {lowStock.slice(0, 8).map(item => (
+              <div key={item.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm truncate">{item.name}</p>
+                  <p className="text-xs text-gray-400 capitalize truncate">{item.category || 'Uncategorized'}</p>
+                </div>
+                <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full flex-shrink-0 ${
+                  Number(item.stock) === 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {Number(item.stock) === 0 ? 'Out' : `${item.stock} left`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── charts row ─────────────────────────────────────────────────────── */}

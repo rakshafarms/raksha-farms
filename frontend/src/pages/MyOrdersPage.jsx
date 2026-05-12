@@ -91,7 +91,7 @@ export default function MyOrdersPage() {
   async function handleRefresh() {
     setSyncing(true)
     await syncOrdersByUser()
-    const phone = user?.phone || allOrders[0]?.customer?.phone
+    const phone = user?.phone
     if (phone) await syncOrdersByPhone(phone)
     setSyncing(false)
   }

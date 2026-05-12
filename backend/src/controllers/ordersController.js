@@ -2,6 +2,20 @@ import { query } from '../config/database.js'
 import pool from '../config/database.js'
 
 const VALID_STATUSES = ['placed','accepted','preparing','out_for_delivery','delivered','cancelled','rejected']
+const orderEventClients = new Set()
+
+export function addOrderEventClient(res) {
+  orderEventClients.add(res)
+  res.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`)
+  return () => orderEventClients.delete(res)
+}
+
+function broadcastOrderCreated(order) {
+  const payload = JSON.stringify({ type: 'order_created', order })
+  for (const client of orderEventClients) {
+    client.write(`event: order_created\ndata: ${payload}\n\n`)
+  }
+}
 
 // Server-side delivery fee — reads from DB settings (cached for 60s)
 let _feeCache = null
@@ -268,6 +282,7 @@ export async function createOrder(req, res) {
     }
 
     await client.query('COMMIT')
+    broadcastOrderCreated(order)
     res.status(201).json(order)
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
@@ -281,7 +296,7 @@ export async function getOrders(req, res) {
   try {
     const { status, page = 1, limit = 20, search, from_date, to_date } = req.query
     const pg     = Math.max(1, parseInt(page)  || 1)
-    const lim    = Math.min(100, parseInt(limit) || 20)
+    const lim    = Math.min(1000, parseInt(limit) || 20)
     const offset = (pg - 1) * lim
 
     const filterParams = []
@@ -530,11 +545,11 @@ export async function getOrdersByPhone(req, res) {
   try {
     const phone = req.params.phone.replace(/\D/g, '').slice(-10)
     if (phone.length !== 10) return res.status(400).json({ error: 'Invalid phone' })
-    // Public endpoint — return only summary data (no address/email/customer name/notes)
-    // so a phone-number guess can't leak full PII.
+    // Public endpoint — return only status/total summary, no PII or purchase details.
+    // items column is excluded so a phone-number guess can't reveal what someone bought.
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
-              items, created_at, updated_at
+              created_at, updated_at
        FROM orders
        WHERE address->>'phone' LIKE $1
          AND created_at > NOW() - INTERVAL '90 days'

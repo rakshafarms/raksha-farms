@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { couponsAPI } from '../../lib/api'
 import { Plus, Trash2, Pencil, X, ToggleLeft, ToggleRight, Shuffle, Tag, TrendingUp, Clock, Users } from 'lucide-react'
@@ -31,13 +31,26 @@ function ExpiryBadge({ expiresAt }) {
   return <span className="text-xs text-gray-400">{new Date(expiresAt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</span>
 }
 
+function useAdminToast() {
+  const [toast, setToast] = React.useState(null)
+  const show = (msg, type = 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const el = toast ? (
+    <div className={`fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      {toast.msg}
+    </div>
+  ) : null
+  return { show, el }
+}
+
 export default function CouponsPage() {
+  const { show: showToast, el: toastEl } = useAdminToast()
   const [coupons, setCoupons] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null)
   const [filter, setFilter] = useState('all') // all | active | inactive | expired
 
   async function load() {
@@ -71,19 +84,19 @@ export default function CouponsPage() {
       if (editing) await couponsAPI.update(editing, payload)
       else await couponsAPI.create(payload)
       setShowModal(false); load()
-    } catch(e) { alert(e.response?.data?.error || 'Failed to save') }
+    } catch(e) { showToast(e.response?.data?.error || 'Failed to save') }
     finally { setSaving(false) }
   }
 
   async function handleToggle(id) {
     setToggling(id)
-    try { await couponsAPI.toggle(id); load() } catch(e) { alert('Failed') }
+    try { await couponsAPI.toggle(id); load() } catch(e) { showToast('Failed to toggle coupon') }
     finally { setToggling(null) }
   }
 
   async function del(id) {
-    if (!confirm('Delete this coupon? This cannot be undone.')) return
-    try { await couponsAPI.delete(id); load() } catch(e) { alert('Failed') }
+    setPendingDelete(null)
+    try { await couponsAPI.delete(id); load() } catch(e) { showToast('Failed to delete coupon') }
   }
 
   const filtered = coupons.filter(c => {
@@ -103,6 +116,18 @@ export default function CouponsPage() {
 
   return (
     <AdminLayout title="Coupons">
+      {toastEl}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-4">Delete this coupon? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => del(pendingDelete)} className="flex-1 py-2 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600">Yes, delete</button>
+              <button onClick={() => setPendingDelete(null)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
@@ -174,7 +199,7 @@ export default function CouponsPage() {
                   </div>
                   <div className="flex gap-1 flex-shrink-0 ml-2">
                     <button onClick={() => openEdit(c)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-400 transition-colors" title="Edit"><Pencil size={14}/></button>
-                    <button onClick={() => del(c.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors" title="Delete"><Trash2 size={14}/></button>
+                    <button onClick={() => setPendingDelete(c.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors" title="Delete"><Trash2 size={14}/></button>
                   </div>
                 </div>
 

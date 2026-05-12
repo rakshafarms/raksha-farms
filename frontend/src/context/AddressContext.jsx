@@ -34,6 +34,13 @@ export function AddressProvider({ children }) {
     return () => window.removeEventListener('rf:login', syncFromBackend)
   }, [syncFromBackend])
 
+  // On logout: clear addresses immediately
+  useEffect(() => {
+    function onLogout() { setAddresses([]) }
+    window.addEventListener('rf:logout', onLogout)
+    return () => window.removeEventListener('rf:logout', onLogout)
+  }, [])
+
   async function addAddress(addr) {
     const token = getToken()
     if (!token) return null          // must be logged in to save

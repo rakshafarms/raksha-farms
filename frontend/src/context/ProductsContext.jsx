@@ -45,6 +45,7 @@ export function ProductsProvider({ children }) {
           rating:      4.7,
           reviews:     42,
           variants:    Array.isArray(p.variants) ? p.variants : [],
+          images:      Array.isArray(p.images) ? p.images : [],
         }))
         setProducts(normalized)
       })

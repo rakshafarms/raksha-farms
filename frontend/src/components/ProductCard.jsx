@@ -23,7 +23,8 @@ function Stars({ rating = 4.8 }) {
 }
 
 function seededRating(id) {
-  const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  if (!id) return 4.8
+  const seed = String(id).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
   return [4.7, 4.8, 4.9, 5.0, 4.6, 4.8, 4.9, 4.7, 5.0, 4.8][seed % 10]
 }
 

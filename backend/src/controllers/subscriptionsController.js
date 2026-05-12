@@ -9,7 +9,8 @@ function frequencyToDays(frequency, intervalDays) {
   switch ((frequency || '').toLowerCase()) {
     case 'daily':    return 1
     case 'weekly':   return 7
-    case 'biweekly': return 14
+    case 'biweekly':   return 14
+    case 'bi-weekly':  return 14
     case 'monthly':  return 30
     default:         return 1
   }
@@ -398,7 +399,27 @@ export async function createSubscription(req, res) {
     const { items, frequency, start_date, address, custom_schedule, interval_days, plan_id } = req.body
     if (!items?.length || !frequency) return res.status(400).json({ error: 'items and frequency are required' })
 
-    const pricePerCycle = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
+    // Validate quantities and look up real prices from DB — never trust client-supplied prices
+    const ids = items.map(it => it.id).filter(Boolean)
+    if (ids.length !== items.length) return res.status(400).json({ error: 'Every item must have a valid product id' })
+    const { rows: dbProducts } = await query(
+      `SELECT id, price, offer_price, is_active FROM products WHERE id = ANY($1)`, [ids]
+    )
+    const productMap = Object.fromEntries(dbProducts.map(p => [String(p.id), p]))
+
+    let pricePerCycle = 0
+    const validatedItems = []
+    for (const it of items) {
+      const prod = productMap[String(it.id)]
+      if (!prod) return res.status(400).json({ error: `Product ${it.id} not found` })
+      if (!prod.is_active) return res.status(400).json({ error: `"${it.id}" is no longer available` })
+      const qty = Math.floor(Number(it.quantity))
+      if (!qty || qty < 1) return res.status(400).json({ error: `Invalid quantity for product ${it.id}` })
+      const unitPrice = prod.offer_price ? Number(prod.offer_price) : Number(prod.price)
+      pricePerCycle += unitPrice * qty
+      validatedItems.push({ ...it, price: unitPrice, quantity: qty })
+    }
+
     const startDate = start_date || new Date().toISOString().split('T')[0]
 
     const notes = custom_schedule
@@ -413,7 +434,7 @@ export async function createSubscription(req, res) {
     `, [
       req.user.id,
       plan_id || null,
-      JSON.stringify(items),
+      JSON.stringify(validatedItems),
       pricePerCycle,
       frequency,
       startDate,

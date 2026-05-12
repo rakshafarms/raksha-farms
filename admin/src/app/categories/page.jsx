@@ -1,8 +1,19 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { categoriesAPI } from '../../lib/api'
 import { Plus, Pencil, Trash2, X } from 'lucide-react'
+
+function useAdminToast() {
+  const [toast, setToast] = React.useState(null)
+  const show = (msg, type = 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const el = toast ? (
+    <div className={`fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-600'}`}>
+      {toast.msg}
+    </div>
+  ) : null
+  return { show, el }
+}
 
 const EMPTY = { slug:'', name:'', color:'#16a34a', tagline:'', sort_order:0, is_active:true }
 
@@ -22,12 +33,14 @@ function Initials({ name, color }) {
 }
 
 export default function CategoriesPage() {
-  const [cats, setCats]           = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing]     = useState(null)
-  const [form, setForm]           = useState(EMPTY)
-  const [saving, setSaving]       = useState(false)
+  const { show: showToast, el: toastEl } = useAdminToast()
+  const [cats, setCats]             = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [showModal, setShowModal]   = useState(false)
+  const [editing, setEditing]       = useState(null)
+  const [form, setForm]             = useState(EMPTY)
+  const [saving, setSaving]         = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(null) // { id, name }
 
   async function load() {
     setLoading(true)
@@ -45,25 +58,37 @@ export default function CategoriesPage() {
       if (editing) await categoriesAPI.update(editing, form)
       else await categoriesAPI.create(form)
       setShowModal(false); load()
-    } catch(e) { alert(e.response?.data?.error || 'Save failed') }
+    } catch(e) { showToast(e.response?.data?.error || 'Save failed') }
     finally { setSaving(false) }
   }
 
-  async function handleDelete(id, name) {
-    if (!confirm(`Delete "${name}"? Products won't be deleted.`)) return
-    try { await categoriesAPI.delete(id); load() }
-    catch(e) { alert('Delete failed') }
+  async function handleDelete(id) {
+    try { await categoriesAPI.delete(id); setPendingDelete(null); load() }
+    catch(e) { setPendingDelete(null); showToast('Delete failed') }
   }
 
   async function toggleActive(c) {
     try { await categoriesAPI.update(c.id, { ...c, is_active: !c.is_active }); load() }
-    catch(e) { alert('Update failed') }
+    catch(e) { showToast('Update failed') }
   }
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
     <AdminLayout title="Categories">
+      {toastEl}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4">
+            <p className="font-semibold text-gray-800 mb-1">Delete &ldquo;{pendingDelete.name}&rdquo;?</p>
+            <p className="text-sm text-gray-400 mb-4">Products in this category won&rsquo;t be deleted.</p>
+            <div className="flex gap-3">
+              <button onClick={() => handleDelete(pendingDelete.id)} className="flex-1 py-2 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600">Yes, delete</button>
+              <button onClick={() => setPendingDelete(null)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-5">
         <p className="text-sm text-gray-500">{cats.length} categories — changes reflect on website instantly</p>
         <button onClick={openAdd} className="flex items-center gap-2 bg-[#1B4332] text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-[#163826] transition">
@@ -105,7 +130,7 @@ export default function CategoriesPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">
                     <button onClick={() => openEdit(c)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600"><Pencil size={15}/></button>
-                    <button onClick={() => handleDelete(c.id, c.name)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 size={15}/></button>
+                    <button onClick={() => setPendingDelete({ id: c.id, name: c.name })} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 size={15}/></button>
                   </div>
                 </td>
               </tr>

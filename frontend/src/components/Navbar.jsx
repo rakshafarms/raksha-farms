@@ -24,6 +24,7 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen]     = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
+  const [cartBump, setCartBump]         = useState(false)
   const userMenuRef = useRef(null)
   const searchRef   = useRef(null)
 
@@ -50,6 +51,15 @@ export default function Navbar() {
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
   }, [searchOpen])
+
+  useEffect(() => {
+    function handleCartBump() {
+      setCartBump(true)
+      window.setTimeout(() => setCartBump(false), 650)
+    }
+    window.addEventListener('rf:cart-bump', handleCartBump)
+    return () => window.removeEventListener('rf:cart-bump', handleCartBump)
+  }, [])
 
   function handleSearch(e) {
     e.preventDefault()
@@ -122,7 +132,7 @@ export default function Navbar() {
                 <div className="relative">
                   <button
                     onClick={openDrawer}
-                    className="btn-ripple flex items-center gap-2 bg-forest-500 hover:bg-forest-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 shadow-sm hover:shadow-forest"
+                    className={`btn-ripple flex items-center gap-2 bg-forest-500 hover:bg-forest-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 shadow-sm hover:shadow-forest ${cartBump ? 'cart-bump' : ''}`}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 5M7 13l1.5 5m7-5l1.5 5M17 18a1 1 0 11-2 0 1 1 0 012 0zM9 18a1 1 0 11-2 0 1 1 0 012 0z" />

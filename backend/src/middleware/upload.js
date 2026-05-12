@@ -37,5 +37,11 @@ const fileFilter = (req, file, cb) => {
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
 })
+
+// Convenience: single cover image + up to 10 gallery images in one request
+export const uploadProductImages = upload.fields([
+  { name: 'image',  maxCount: 1  },
+  { name: 'images', maxCount: 10 },
+])

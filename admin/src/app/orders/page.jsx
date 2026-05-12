@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
   Package, Clock, CreditCard, Smartphone, Banknote,
-  Calendar, Filter
+  Calendar, Printer, FileSpreadsheet
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -80,6 +80,7 @@ function RejectModal({ order, onClose, onConfirm }) {
   const [checkedIds, setCheckedIds] = useState(new Set())
   const [remarks, setRemarks]       = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [selErr, setSelErr]         = useState('')
 
   const toggle = (idx) => setCheckedIds(prev => {
     const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next
@@ -90,7 +91,7 @@ function RejectModal({ order, onClose, onConfirm }) {
   const rejTotal     = items.filter((_,i) => checkedIds.has(i)).reduce((s,it) => s + it.price * it.quantity, 0)
 
   async function submit() {
-    if (noneSelected) { alert('Select at least one item'); return }
+    if (noneSelected) { setSelErr('Select at least one item to reject'); return }
     setSubmitting(true)
     const rejected = items.filter((_,i) => checkedIds.has(i))
       .map(it => ({ id:it.id, name:it.name, quantity:it.quantity, price:it.price, unit:it.unit, emoji:it.emoji }))
@@ -143,6 +144,9 @@ function RejectModal({ order, onClose, onConfirm }) {
           </div>
         </div>
 
+        {selErr && (
+          <p className="px-6 pb-2 text-xs font-semibold text-red-600">{selErr}</p>
+        )}
         <div className="flex gap-3 px-6 pb-5">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm transition-colors">Cancel</button>
           <button onClick={submit} disabled={submitting || noneSelected}
@@ -156,7 +160,7 @@ function RejectModal({ order, onClose, onConfirm }) {
 }
 
 // ── Order Row (expanded card) ──────────────────────────────────────────────────
-function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject }) {
+function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, onSelect }) {
   const isOpen  = expanded === o.id
   const addr    = parseAddr(o)
   const notes   = parseNotes(o)
@@ -172,6 +176,15 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject }) {
         className="flex items-center gap-3 px-4 py-3.5 bg-white cursor-pointer select-none"
         onClick={onToggle}
       >
+        <input
+          type="checkbox"
+          checked={selected}
+          onClick={e => e.stopPropagation()}
+          onChange={e => onSelect(o.id, e.target.checked)}
+          className="w-4 h-4 accent-[#1B4332] flex-shrink-0"
+          aria-label={`Select order ${fmtOrderId(o.created_at)}`}
+        />
+
         {/* Avatar */}
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#1B4332] to-emerald-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
           {name[0]?.toUpperCase()}
@@ -189,7 +202,7 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject }) {
         {/* Items preview */}
         <div className="hidden sm:block flex-1 min-w-0 text-xs text-gray-500 truncate px-2">
           {(Array.isArray(o.items) ? o.items : []).slice(0,2).map(it => it.name).join(', ')}
-          {(o.items?.length || 0) > 2 ? ` +${o.items.length - 2} more` : ''}
+          {Array.isArray(o.items) && o.items.length > 2 ? ` +${o.items.length - 2} more` : ''}
         </div>
 
         {/* Payment */}
@@ -354,6 +367,7 @@ export default function OrdersPage() {
   const [loading, setLoading]       = useState(true)
   const [expanded, setExpanded]     = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [downloading, setDownloading] = useState(false)
   const [toast, setToast]           = useState(null)
   const [tick, setTick]             = useState(0)
@@ -381,6 +395,7 @@ export default function OrdersPage() {
       Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
       const { data } = await ordersAPI.getAll(params)
       setOrders(data.orders || [])
+      setSelectedIds(new Set())
       setTotal(data.total   || 0)
       setPages(data.pages   || 1)
     } catch(e) {
@@ -412,6 +427,27 @@ export default function OrdersPage() {
       showToast('Status updated')
     } catch(e) {
       showToast(e.response?.data?.error || 'Update failed', 'error')
+    }
+  }
+
+  function toggleOrderSelection(id, checked) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      checked ? next.add(id) : next.delete(id)
+      return next
+    })
+  }
+
+  async function bulkUpdateStatus(newStatus) {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    try {
+      await Promise.all(ids.map(id => ordersAPI.updateStatus(id, newStatus)))
+      setOrders(prev => prev.map(o => selectedIds.has(o.id) ? { ...o, status: newStatus } : o))
+      setSelectedIds(new Set())
+      showToast(`Marked ${ids.length} order${ids.length !== 1 ? 's' : ''} as ${STATUS_META[newStatus]?.label || newStatus}`)
+    } catch(e) {
+      showToast(e.response?.data?.error || 'Bulk update failed', 'error')
     }
   }
 
@@ -462,8 +498,66 @@ export default function OrdersPage() {
       const blob = new Blob([[headers.join(','),...lines].join('\n')], { type:'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href=url; a.download=`orders-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
-    } catch { alert('Download failed') }
+    } catch { showToast('Download failed', 'error') }
     finally { setDownloading(false) }
+  }
+
+  async function downloadExcel() {
+    setDownloading(true)
+    try {
+      const params = { page:1, limit:1000, status, search, from_date:fromDate, to_date:toDate }
+      Object.keys(params).forEach(k => !params[k] && delete params[k])
+      const { data } = await ordersAPI.getAll(params)
+      const rows = data.orders || []
+      const headers = ['Order ID','Customer','Phone','Address','Items','Payment','Status','Total','Date']
+      const body = rows.map(o => {
+        const a = parseAddr(o)
+        const items = (Array.isArray(o.items)?o.items:[]).map(i=>`${i.name} x ${i.quantity}`).join(' | ')
+        const d = new Date(o.created_at)
+        return [
+          fmtOrderId(o.created_at),
+          a.name||o.customer_name||'Guest',
+          a.phone||o.customer_phone||'',
+          a.address||'',
+          items,
+          o.payment_method||'',
+          STATUS_META[o.status]?.label||o.status,
+          o.total,
+          d.toLocaleDateString('en-IN'),
+        ].map(v => `<td>${String(v).replace(/[<>&]/g, ch => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;' }[ch]))}</td>`).join('')
+      }).map(cells => `<tr>${cells}</tr>`).join('')
+      const html = `<table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`
+      const blob = new Blob([html], { type:'application/vnd.ms-excel;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=`orders-${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(url)
+    } catch { showToast('Excel export failed', 'error') }
+    finally { setDownloading(false) }
+  }
+
+  function printPackingSlips() {
+    const selectedOrders = orders.filter(o => selectedIds.has(o.id))
+    if (!selectedOrders.length) return
+    const html = selectedOrders.map(o => {
+      const a = parseAddr(o)
+      const items = (Array.isArray(o.items) ? o.items : []).map(item =>
+        `<li><strong>${item.name}</strong> x ${item.quantity} ${item.unit || ''}</li>`
+      ).join('')
+      return `
+        <section class="slip">
+          <h2>Raksha Farms Packing Slip</h2>
+          <p><strong>Order:</strong> #${fmtOrderId(o.created_at)}</p>
+          <p><strong>Customer:</strong> ${a.name || o.customer_name || 'Guest'} ${a.phone || o.customer_phone ? `(${a.phone || o.customer_phone})` : ''}</p>
+          <p><strong>Address:</strong> ${a.address || ''}${a.city ? `, ${a.city}` : ''}${a.pincode ? ` - ${a.pincode}` : ''}</p>
+          <ul>${items}</ul>
+        </section>
+      `
+    }).join('')
+    const win = window.open('', '_blank')
+    if (!win) return showToast('Allow popups to print packing slips', 'error')
+    win.document.write(`<html><head><title>Packing Slips</title><style>body{font-family:Arial,sans-serif}.slip{page-break-after:always;border:1px solid #ddd;padding:24px;margin:16px}h2{margin-top:0}li{margin:8px 0}</style></head><body>${html}</body></html>`)
+    win.document.close()
+    win.focus()
+    win.print()
   }
 
   // Group orders by IST date
@@ -476,6 +570,8 @@ export default function OrdersPage() {
   }
 
   const activeFilters = [status, search, fromDate, toDate].filter(Boolean).length
+  const selectedOrders = orders.filter(o => selectedIds.has(o.id))
+  const allVisibleSelected = orders.length > 0 && selectedOrders.length === orders.length
 
   return (
     <AdminLayout title="Orders">
@@ -509,6 +605,10 @@ export default function OrdersPage() {
           <button onClick={downloadCSV} disabled={downloading}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600 disabled:opacity-50 transition-colors">
             <Download size={14}/>{downloading ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <button onClick={downloadExcel} disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600 disabled:opacity-50 transition-colors">
+            <FileSpreadsheet size={14}/>Excel
           </button>
         </div>
       </div>
@@ -545,6 +645,30 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => {
+              const d = new Date()
+              const iso = d.toISOString().slice(0,10)
+              setFromDate(iso); setToDate(iso); setPage(1)
+            }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 text-gray-500 hover:border-gray-300">
+              Today
+            </button>
+            <button onClick={() => {
+              const end = new Date()
+              const start = new Date(); start.setDate(end.getDate() - 6)
+              setFromDate(start.toISOString().slice(0,10)); setToDate(end.toISOString().slice(0,10)); setPage(1)
+            }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 text-gray-500 hover:border-gray-300">
+              Last 7 Days
+            </button>
+            <button onClick={() => {
+              const end = new Date()
+              const start = new Date(); start.setDate(end.getDate() - 29)
+              setFromDate(start.toISOString().slice(0,10)); setToDate(end.toISOString().slice(0,10)); setPage(1)
+            }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 text-gray-500 hover:border-gray-300">
+              Last 30 Days
+            </button>
+          </div>
+
           {activeFilters > 0 && (
             <button onClick={clearFilters}
               className="flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors">
@@ -572,6 +696,34 @@ export default function OrdersPage() {
           ))}
         </div>
       </div>
+
+      {orders.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 mb-5 flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={e => setSelectedIds(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())}
+              className="w-4 h-4 accent-[#1B4332]"
+            />
+            {selectedOrders.length ? `${selectedOrders.length} selected` : 'Select visible orders'}
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => bulkUpdateStatus('out_for_delivery')} disabled={!selectedOrders.length}
+              className="px-3 py-2 bg-violet-600 text-white rounded-xl text-xs font-bold disabled:opacity-40">
+              Mark {selectedOrders.length || ''} Out for Delivery
+            </button>
+            <button onClick={() => bulkUpdateStatus('delivered')} disabled={!selectedOrders.length}
+              className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-40">
+              Mark Delivered
+            </button>
+            <button onClick={printPackingSlips} disabled={!selectedOrders.length}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 disabled:opacity-40">
+              <Printer size={13}/> Print Packing Slips
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Orders list ── */}
       {loading ? (
@@ -612,6 +764,8 @@ export default function OrdersPage() {
                     onToggle={() => setExpanded(expanded === o.id ? null : o.id)}
                     onChangeStatus={changeStatus}
                     onReject={setRejectOrder}
+                    selected={selectedIds.has(o.id)}
+                    onSelect={toggleOrderSelection}
                   />
                 ))}
               </div>

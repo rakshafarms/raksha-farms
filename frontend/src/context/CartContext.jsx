@@ -116,6 +116,9 @@ export function CartProvider({ children }) {
       const unit  = selectedVariant ? selectedVariant.label : product.unit
       return [...prev, { ...product, cartKey: key, quantity: Math.min(safeQty, stock), price, unit, selectedVariant }]
     })
+    window.dispatchEvent(new CustomEvent('rf:cart-bump', {
+      detail: { image: product.image, name: product.name },
+    }))
   }
 
   function removeFromCart(cartKey) {

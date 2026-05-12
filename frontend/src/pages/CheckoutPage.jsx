@@ -193,6 +193,8 @@ export default function CheckoutPage() {
     const errs = {}
     if (!form.name.trim())                          errs.name    = 'Full name is required'
     if (!PHONE_RE.test(form.phone.trim()))          errs.phone   = 'Enter valid 10-digit Indian mobile number'
+    if (!user && form.email.trim() && !/\S+@\S+\.\S+/.test(form.email.trim()))
+                                                    errs.email   = 'Enter a valid email address'
     if (!form.address.trim())                       errs.address = 'Delivery address is required'
     if (!form.city.trim())                          errs.city    = 'City is required'
     if (!PINCODE_RE.test(form.pincode.trim()))      errs.pincode = 'Enter valid 6-digit pincode'
@@ -318,7 +320,7 @@ export default function CheckoutPage() {
       const backendRes = await fetch(`${BACKEND_URL}/api/orders`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ customer, items, subtotal: totalPrice - couponDiscount, deliveryFee: slotFee, total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label, coupon_code: couponApplied?.code || null }),
+        body: JSON.stringify({ customer, items, subtotal: totalPrice, deliveryFee: slotFee, total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label, coupon_code: couponApplied?.code || null }),
       })
       if (backendRes.ok) {
         const data = await backendRes.json()

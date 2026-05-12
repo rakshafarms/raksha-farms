@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { useWishlist } from '../context/WishlistContext'
@@ -10,6 +10,7 @@ export default function BottomNav() {
   const { isLoggedIn } = useAuth()
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const [cartBump, setCartBump] = useState(false)
 
   const active = (path) => pathname === path
 
@@ -29,6 +30,15 @@ export default function BottomNav() {
       setTimeout(() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' }), 200)
     }
   }
+
+  useEffect(() => {
+    function handleCartBump() {
+      setCartBump(true)
+      window.setTimeout(() => setCartBump(false), 650)
+    }
+    window.addEventListener('rf:cart-bump', handleCartBump)
+    return () => window.removeEventListener('rf:cart-bump', handleCartBump)
+  }, [])
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-100 shadow-bottom" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -51,7 +61,7 @@ export default function BottomNav() {
         <div className="flex items-center justify-center">
           <button
             onClick={openDrawer}
-            className="relative -mt-5 w-14 h-14 bg-forest-500 rounded-full shadow-forest flex items-center justify-center text-white transition-all active:scale-95"
+            className={`relative -mt-5 w-14 h-14 bg-forest-500 rounded-full shadow-forest flex items-center justify-center text-white transition-all active:scale-95 ${cartBump ? 'cart-bump' : ''}`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 5M7 13l1.5 5m7-5l1.5 5M17 18a1 1 0 11-2 0 1 1 0 012 0zM9 18a1 1 0 11-2 0 1 1 0 012 0z" />

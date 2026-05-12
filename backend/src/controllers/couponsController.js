@@ -45,6 +45,7 @@ export async function getAvailableCoupons(req, res) {
 export async function createCoupon(req, res) {
   try {
     const { code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only } = req.body
+    if (!code || !type || value === undefined) return res.status(400).json({ error: 'code, type, and value are required' })
     const { rows } = await query(
       `INSERT INTO coupons (code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
@@ -114,6 +115,7 @@ export async function deleteCoupon(req, res) {
 export async function validateCoupon(req, res) {
   try {
     const { code, order_total, user_id } = req.body
+    if (!code) return res.status(400).json({ error: 'code is required' })
     const { rows } = await query(
       `SELECT * FROM coupons WHERE code=$1 AND is_active=true
        AND (expires_at IS NULL OR expires_at > NOW())

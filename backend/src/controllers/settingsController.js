@@ -1,4 +1,4 @@
-import { query } from '../config/database.js'
+import { query, pool } from '../config/database.js'
 
 const DELIVERY_KEYS = ['free_delivery_threshold', 'delivery_fee_standard', 'delivery_fee_express']
 const DEFAULTS = { free_delivery_threshold: 500, delivery_fee_standard: 30, delivery_fee_express: 60 }
@@ -36,6 +36,7 @@ export async function getDeliverySettings(req, res) {
 }
 
 export async function updateDeliverySettings(req, res) {
+  const client = await pool.connect()
   try {
     await ensureTable()
     const { free_delivery_threshold, delivery_fee_standard, delivery_fee_express } = req.body
@@ -45,13 +46,20 @@ export async function updateDeliverySettings(req, res) {
       ['delivery_fee_express',    delivery_fee_express],
     ].filter(([, v]) => v !== undefined && v !== null && !isNaN(Number(v)))
 
+    if (!updates.length) return res.status(400).json({ error: 'No valid values provided' })
+
+    await client.query('BEGIN')
     for (const [key, value] of updates) {
-      await query(
+      await client.query(
         `INSERT INTO store_settings (key, value, updated_at) VALUES ($1, $2, NOW())
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
         [key, String(Number(value))]
       )
     }
+    await client.query('COMMIT')
     res.json({ ok: true })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    res.status(500).json({ error: err.message })
+  } finally { client.release() }
 }

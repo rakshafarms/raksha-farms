@@ -1,5 +1,11 @@
 import jwt from 'jsonwebtoken'
 
+function getCookie(req, name) {
+  const cookies = req.headers.cookie || ''
+  const pair = cookies.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))
+  return pair ? decodeURIComponent(pair.slice(name.length + 1)) : null
+}
+
 export function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
@@ -27,8 +33,10 @@ export const adminOnly = [verifyToken, isAdmin]
 // Accepts admin password as Bearer token (for frontend admin panel)
 export function adminSecret(req, res, next) {
   const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' })
-  const token = authHeader.split(' ')[1]
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : getCookie(req, 'admin_token')
+  if (!token) return res.status(401).json({ error: 'No token provided' })
   const secret = process.env.ADMIN_SECRET
   if (secret && token === secret) {
     req.user = { role: 'admin' }
