@@ -405,28 +405,33 @@ export default function ProductsPage() {
                       No variants — product sold in a single size. Add sizes above to let customers choose.
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-gray-400 px-1">
-                        <span>Label (size)</span><span>Price (₹)</span><span>Stock</span><span/>
+                    <div className="w-full border border-gray-200 rounded-xl overflow-hidden">
+                      {/* Header row */}
+                      <div className="grid grid-cols-[2fr_1.5fr_1.5fr_36px] bg-gray-50 border-b border-gray-200">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500">Label (size)</div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Price (₹)</div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Stock (qty)</div>
+                        <div className="w-9" />
                       </div>
+                      {/* Input rows */}
                       {(form.variants||[]).map((v, i) => (
-                        <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                        <div key={i} className={`grid grid-cols-[2fr_1.5fr_1.5fr_36px] items-center ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                           <input
                             value={v.label} placeholder="e.g. 500ml"
                             onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],label:e.target.value}; return {...p,variants:vs} })}
-                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                            className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none focus:bg-blue-50 placeholder-gray-300"/>
                           <input
-                            type="number" min="0" step="0.01" value={v.price} placeholder="₹"
+                            type="number" min="0" step="0.01" value={v.price} placeholder="0.00"
                             onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],price:e.target.value}; return {...p,variants:vs} })}
-                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                            className="w-full px-3 py-2.5 text-sm bg-transparent border-l border-gray-100 focus:outline-none focus:bg-blue-50 placeholder-gray-300"/>
                           <input
-                            type="number" min="0" value={v.stock} placeholder="qty"
+                            type="number" min="0" value={v.stock} placeholder="0"
                             onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],stock:e.target.value}; return {...p,variants:vs} })}
-                            className="border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                            className="w-full px-3 py-2.5 text-sm bg-transparent border-l border-gray-100 focus:outline-none focus:bg-blue-50 placeholder-gray-300"/>
                           <button type="button"
                             onClick={() => setForm(p => ({ ...p, variants: p.variants.filter((_,j)=>j!==i) }))}
-                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
-                            <Trash2 size={14}/>
+                            className="flex items-center justify-center w-9 h-full text-red-400 hover:text-red-600 hover:bg-red-50 transition">
+                            <Trash2 size={13}/>
                           </button>
                         </div>
                       ))}
