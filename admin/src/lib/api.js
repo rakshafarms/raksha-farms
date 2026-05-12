@@ -41,8 +41,10 @@ export const productsAPI = {
   getAll: (params) => api.get('/products', { params }),                   // public (active only)
   getAllAdmin: (params) => api.get('/products/admin/all', { params }),    // admin (all statuses)
   getOne: (id) => api.get(`/products/${id}`),
-  create: (formData) => api.post('/products', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  update: (id, formData) => api.put(`/products/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // Do NOT set Content-Type manually — Axios auto-sets multipart/form-data WITH the boundary when it detects FormData.
+  // Manually setting it strips the boundary and breaks multer (causes "unexpected field" errors).
+  create: (formData) => api.post('/products', formData),
+  update: (id, formData) => api.put(`/products/${id}`, formData),
   archive: (id) => api.delete(`/products/${id}`),                        // soft delete (archive)
   hardDelete: (id) => api.delete(`/products/${id}/hard`),               // permanent delete
   updateStock: (id, stock, reason) => api.patch(`/products/${id}/stock`, { stock, reason }),
