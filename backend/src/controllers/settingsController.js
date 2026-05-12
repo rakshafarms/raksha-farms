@@ -1,4 +1,4 @@
-import { query, pool } from '../config/database.js'
+import pool, { query } from '../config/database.js'
 
 const DELIVERY_KEYS = ['free_delivery_threshold', 'delivery_fee_standard', 'delivery_fee_express']
 const DEFAULTS = { free_delivery_threshold: 500, delivery_fee_standard: 30, delivery_fee_express: 60 }
