@@ -53,13 +53,25 @@ export async function getProduct(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }) }
 }
 
-// Helper: extract uploaded file URLs from req.files (fields) or req.file (single)
+// Helper: extract uploaded file URLs.
+// Works with upload.any()  → req.files is a flat array [{fieldname, filename, …}]
+// Works with upload.fields() → req.files is an object  { image:[…], images:[…] }
+// Works with upload.single() → req.file  is a single object
 function extractImageUrls(req) {
-  // Cover image (field name "image")
-  const coverFile = req.files?.image?.[0] || req.file
-  const image_url = coverFile ? `/uploads/${coverFile.filename}` : undefined
-  // Gallery images (field name "images")
-  const galleryFiles = req.files?.images || []
+  const raw = req.files
+  // Normalise to a flat array regardless of multer mode
+  let allFiles = []
+  if (Array.isArray(raw)) {
+    allFiles = raw                              // upload.any()
+  } else if (raw && typeof raw === 'object') {
+    allFiles = Object.values(raw).flat()       // upload.fields()
+  } else if (req.file) {
+    allFiles = [req.file]                      // upload.single()
+  }
+
+  const coverFile      = allFiles.find(f => f.fieldname === 'image') || req.file
+  const image_url      = coverFile ? `/uploads/${coverFile.filename}` : undefined
+  const galleryFiles   = allFiles.filter(f => f.fieldname === 'images')
   const newGalleryUrls = galleryFiles.map(f => `/uploads/${f.filename}`)
   return { image_url, newGalleryUrls }
 }

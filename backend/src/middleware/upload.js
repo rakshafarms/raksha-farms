@@ -40,8 +40,7 @@ export const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
 })
 
-// Convenience: single cover image + up to 10 gallery images in one request
-export const uploadProductImages = upload.fields([
-  { name: 'image',  maxCount: 1  },
-  { name: 'images', maxCount: 10 },
-])
+// Use upload.any() so multer never throws "unexpected field" regardless of
+// what field names the client sends. The controller filters by fieldname.
+// Accepts up to 11 files total (1 cover + 10 gallery).
+export const uploadProductImages = upload.any()
