@@ -24,7 +24,8 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen]     = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
-  const [cartBump, setCartBump]         = useState(false)
+  const [cartBump, setCartBump]           = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const userMenuRef = useRef(null)
   const searchRef   = useRef(null)
 
@@ -185,7 +186,7 @@ export default function Navbar() {
                         </div>
                         <div className="border-t border-gray-50 py-1">
                           <button
-                            onClick={() => { logout(); navigate('/') }}
+                            onClick={() => { setUserMenuOpen(false); setShowLogoutConfirm(true) }}
                             className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors"
                           >
                             Sign Out
@@ -240,7 +241,7 @@ export default function Navbar() {
                   <MobileNavLink to="/profile">Profile</MobileNavLink>
                   <MobileNavLink to="/my-orders">My Orders</MobileNavLink>
                   <button
-                    onClick={() => { logout(); navigate('/') }}
+                    onClick={() => { setMenuOpen(false); setShowLogoutConfirm(true) }}
                     className="block w-full text-left px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 font-medium text-sm transition-colors"
                   >
                     Sign Out
@@ -258,6 +259,42 @@ export default function Navbar() {
           )}
         </nav>
       </header>
+
+      {/* ── Logout confirmation modal ── */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            {/* Icon */}
+            <div className="flex flex-col items-center pt-7 pb-4 px-6">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-3">
+                <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-gray-800">Sign out of Raksha Farms?</h3>
+              <p className="text-sm text-gray-400 text-center mt-1">You'll need to sign in again to view your orders and wishlist.</p>
+            </div>
+            {/* Buttons */}
+            <div className="border-t border-gray-100">
+              <button
+                onClick={() => { logout(); navigate('/'); setShowLogoutConfirm(false) }}
+                className="w-full py-3.5 text-sm font-semibold text-red-500 hover:bg-red-50 transition-colors border-b border-gray-100"
+              >
+                Yes, Sign Out
+              </button>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="w-full py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

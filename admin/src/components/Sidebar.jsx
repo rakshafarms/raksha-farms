@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -24,7 +25,9 @@ const nav = [
 
 export default function Sidebar({ mobileOpen = true, onClose, collapsed = false, onToggleCollapse }) {
   const path = usePathname()
-  function logout() {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+
+  function doLogout() {
     Cookies.remove('admin_token')
     localStorage.removeItem('admin_token')
     window.location.href = '/login'
@@ -97,13 +100,44 @@ export default function Sidebar({ mobileOpen = true, onClose, collapsed = false,
 
         {/* Logout */}
         <div className="p-4 border-t border-white/10">
-          <button onClick={logout}
+          <button onClick={() => setShowLogoutConfirm(true)}
             title={collapsed ? 'Sign Out' : undefined}
             className={`flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-300 hover:bg-white/10 rounded-lg transition-colors ${collapsed ? 'md:justify-center' : ''}`}>
             <LogOut size={18} /> <span className={collapsed ? 'md:hidden' : ''}>Sign Out</span>
           </button>
         </div>
       </aside>
+
+      {/* ── Logout confirmation modal ── */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col items-center pt-7 pb-4 px-6">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-3">
+                <LogOut size={24} className="text-red-500" />
+              </div>
+              <h3 className="text-base font-bold text-gray-800">Sign out of Admin Panel?</h3>
+              <p className="text-sm text-gray-400 text-center mt-1">You'll be redirected to the login page.</p>
+            </div>
+            <div className="border-t border-gray-100">
+              <button
+                onClick={doLogout}
+                className="w-full py-3.5 text-sm font-semibold text-red-500 hover:bg-red-50 transition-colors border-b border-gray-100"
+              >
+                Yes, Sign Out
+              </button>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="w-full py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
