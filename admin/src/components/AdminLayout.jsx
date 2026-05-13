@@ -43,7 +43,10 @@ export default function AdminLayout({ children, title }) {
     const token = Cookies.get('admin_token') || localStorage.getItem('admin_token')
     if (!token) { router.replace('/login'); return }
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
+      // JWT uses base64url (- and _ instead of + and /). atob() only handles
+      // standard base64, so we must convert before decoding.
+      const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+      const payload = JSON.parse(atob(b64))
       setUser(payload)
     } catch { router.replace('/login') }
   }, [])
