@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
   Package, Clock, CreditCard, Smartphone, Banknote,
-  Calendar, Printer, FileSpreadsheet, Bell, Store, Globe
+  Calendar, Printer, FileSpreadsheet, Bell, Store, Globe, Receipt
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -72,6 +72,74 @@ function StatusPill({ status, isPartial }) {
   return <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${m.pill}`}>
     <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`}/>{m.label}
   </span>
+}
+
+// ── Print individual order bill ───────────────────────────────────────────────
+function printOrderBill(o) {
+  const addr    = parseAddr(o)
+  const name    = addr.name  || o.customer_name  || 'Guest'
+  const phone   = addr.phone || o.customer_phone || ''
+  const items   = Array.isArray(o.items) ? o.items : []
+  const walkIn  = isWalkIn(o)
+  const refId   = o.reference_id || fmtOrderId(o.created_at)
+  const dateStr = new Date(o.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })
+  const subtotal = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0)
+  const fee      = Number(o.delivery_fee || 0)
+  const discount = subtotal + fee - Number(o.total || 0)
+
+  const itemRows = items.map(i => `
+    <div style="margin:6px 0">
+      <div style="font-weight:600;font-size:13px">${i.emoji || ''} ${i.name}</div>
+      ${i.unit ? `<div style="font-size:11px;color:#666">${i.unit}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:2px">
+        <span>${i.quantity} × ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
+        <span style="font-weight:700">₹${(Number(i.price||0)*Number(i.quantity||1)).toLocaleString('en-IN')}</span>
+      </div>
+    </div>`).join('')
+
+  const win = window.open('', '_blank', 'width=420,height=680')
+  if (!win) return
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+  <title>Bill — ${refId}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Courier New',monospace;font-size:13px;padding:22px;width:340px;color:#111}
+    .center{text-align:center} .right{text-align:right} .bold{font-weight:700}
+    .logo{font-size:20px;font-weight:800;letter-spacing:1px}
+    .divider{border:none;border-top:1px dashed #aaa;margin:10px 0}
+    .row{display:flex;justify-content:space-between;margin:3px 0;font-size:12px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-bottom:4px;
+      background:${walkIn ? '#fef3c7' : '#dbeafe'};color:${walkIn ? '#92400e' : '#1e40af'}}
+    .total-row{display:flex;justify-content:space-between;font-size:17px;font-weight:900;margin-top:8px;padding-top:8px;border-top:2px solid #111}
+    .footer{margin-top:16px;text-align:center;font-size:11px;color:#666;line-height:1.7}
+    .status{font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;
+      background:${o.status==='delivered'?'#d1fae5':'#fef9c3'};color:${o.status==='delivered'?'#065f46':'#92400e'}}
+    @media print{body{padding:12px}}
+  </style></head><body>
+  <p class="center logo">🌿 Raksha Farms</p>
+  <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
+  <p class="center" style="margin-top:4px"><span class="badge">${walkIn ? '🏪 Walk-in / Offline' : '🌐 Online Order'}</span></p>
+  <hr class="divider"/>
+  <div class="row"><span>Bill No</span><span class="bold">${refId}</span></div>
+  <div class="row"><span>Date</span><span>${dateStr}</span></div>
+  <div class="row"><span>Customer</span><span class="bold">${name}</span></div>
+  ${phone ? `<div class="row"><span>Phone</span><span>${phone}</span></div>` : ''}
+  ${!walkIn && addr.address ? `<div class="row" style="align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px">${addr.address}${addr.city?', '+addr.city:''}${addr.pincode?' — '+addr.pincode:''}</span></div>` : ''}
+  <div class="row"><span>Payment</span><span class="bold">${(o.payment_method || 'COD').toUpperCase()}</span></div>
+  <div class="row"><span>Status</span><span class="status">${STATUS_META[o.status]?.label || o.status}</span></div>
+  <hr class="divider"/>
+  <div class="bold" style="font-size:11px;margin-bottom:6px">ITEMS</div>
+  ${itemRows}
+  <hr class="divider"/>
+  <div class="row"><span>Subtotal</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>
+  ${fee > 0 ? `<div class="row"><span>Delivery Fee</span><span>₹${fee.toLocaleString('en-IN')}</span></div>` : ''}
+  ${discount > 0.5 ? `<div class="row"><span>Discount</span><span>− ₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
+  <div class="total-row"><span>TOTAL</span><span>₹${Number(o.total||0).toLocaleString('en-IN')}</span></div>
+  <div class="footer">Thank you for shopping with us! 🙏<br/>Visit us again · rakshafarms.in</div>
+  </body></html>`)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print() }, 400)
 }
 
 // ── Order-type helpers ────────────────────────────────────────────────────────
@@ -263,6 +331,14 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
           >
             {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
           </select>
+          {/* Print Bill */}
+          <button
+            onClick={() => printOrderBill(o)}
+            title="Print Bill"
+            className="p-1.5 text-[#1B4332] hover:bg-emerald-50 rounded-lg transition-colors"
+          >
+            <Printer size={14}/>
+          </button>
           {!isFinal && (
             <button
               onClick={() => onReject({ ...o, items: Array.isArray(o.items) ? o.items : [] })}
@@ -410,6 +486,14 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
                   <Phone size={13}/> Call Customer
                 </a>
               )}
+
+              {/* Print Bill button */}
+              <button
+                onClick={() => printOrderBill(o)}
+                className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-[#1B4332] text-[#1B4332] text-xs font-bold rounded-xl hover:bg-emerald-50 transition-colors"
+              >
+                <Printer size={13}/> Print Bill
+              </button>
             </div>
           </div>
         </div>
