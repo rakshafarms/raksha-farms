@@ -17,10 +17,18 @@ const PAY = [
 
 const fmt    = (n) => Number(n || 0).toLocaleString('en-IN')
 const fmtRs  = (n) => `₹${fmt(n)}`
-// Static files are served at root /uploads — strip the trailing /api from API_BASE_URL
+// Backend root for /uploads/ paths (strip trailing /api from API_BASE_URL)
 const BACKEND_ROOT = API_BASE_URL.replace(/\/api\/?$/, '')
-// image_url is stored as "/uploads/file.jpg" — prefix with backend root when not already absolute
-const imgSrc = (url) => !url ? null : url.startsWith('http') ? url : `${BACKEND_ROOT}${url}`
+// image_url resolution:
+//   /images/...  → admin's own public/images/ (copied from frontend, served locally)
+//   /uploads/... → backend Render server (admin-uploaded files)
+//   http(s)://   → absolute, use as-is
+const imgSrc = (url) => {
+  if (!url) return null
+  if (url.startsWith('http')) return url
+  if (url.startsWith('/uploads/')) return `${BACKEND_ROOT}${url}`
+  return url   // /images/... resolved against admin's own domain
+}
 
 export default function BillingPage() {
   const [products,   setProducts]   = useState([])
