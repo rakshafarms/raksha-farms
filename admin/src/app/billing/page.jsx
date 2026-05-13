@@ -316,7 +316,7 @@ export default function BillingPage() {
                       )}
 
                       {/* Image */}
-                      <div className="h-28 bg-gray-50 overflow-hidden">
+                      <div className="h-20 bg-gray-50 overflow-hidden">
                         {imgSrc(p.image_url) ? (
                           <img src={imgSrc(p.image_url)} alt={p.name}
                             className="w-full h-full object-cover"
