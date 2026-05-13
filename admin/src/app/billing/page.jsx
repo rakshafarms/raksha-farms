@@ -17,8 +17,10 @@ const PAY = [
 
 const fmt    = (n) => Number(n || 0).toLocaleString('en-IN')
 const fmtRs  = (n) => `₹${fmt(n)}`
-// image_url is stored as "/uploads/file.jpg" — prefix with API base when not already absolute
-const imgSrc = (url) => !url ? null : url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+// Static files are served at root /uploads — strip the trailing /api from API_BASE_URL
+const BACKEND_ROOT = API_BASE_URL.replace(/\/api\/?$/, '')
+// image_url is stored as "/uploads/file.jpg" — prefix with backend root when not already absolute
+const imgSrc = (url) => !url ? null : url.startsWith('http') ? url : `${BACKEND_ROOT}${url}`
 
 export default function BillingPage() {
   const [products,   setProducts]   = useState([])
