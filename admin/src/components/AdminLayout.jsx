@@ -40,34 +40,18 @@ export default function AdminLayout({ children, title }) {
   const bellRef           = useRef(null)
 
   useEffect(() => {
-    const lsToken     = localStorage.getItem('admin_token')
-    const cookieToken = Cookies.get('admin_token')
-    const token       = lsToken || cookieToken
-
-    // Debug — visible in browser console (F12 → Console)
-    console.log('[AdminAuth] localStorage token:', lsToken ? lsToken.slice(0, 20) + '…' : 'NULL')
-    console.log('[AdminAuth] cookie token:      ', cookieToken ? cookieToken.slice(0, 20) + '…' : 'NULL')
-
-    if (!token) {
-      console.log('[AdminAuth] → NO TOKEN → redirecting to /login')
-      window.location.replace('/login')
-      return
-    }
-
+    // localStorage is the source of truth — always persists across refreshes.
+    // Cookie is a bonus for server-side middleware; localStorage is what matters here.
+    const token = localStorage.getItem('admin_token') || Cookies.get('admin_token')
+    if (!token) { window.location.replace('/login'); return }
     try {
+      // JWT uses base64url (- and _ instead of + and /). atob() only handles
+      // standard base64, so we must convert before decoding.
       const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
       const payload = JSON.parse(atob(b64))
-      console.log('[AdminAuth] JWT payload id:', payload?.id, 'name:', payload?.name)
-      if (!payload?.id) {
-        console.log('[AdminAuth] → NO id in payload → redirecting to /login')
-        window.location.replace('/login')
-        return
-      }
+      if (!payload?.id) { window.location.replace('/login'); return }
       setUser(payload)
-    } catch (e) {
-      console.log('[AdminAuth] → JWT decode error →', e.message, '→ redirecting to /login')
-      window.location.replace('/login')
-    }
+    } catch { window.location.replace('/login') }
   }, [])
 
   useEffect(() => {
@@ -115,7 +99,10 @@ export default function AdminLayout({ children, title }) {
 
   useEffect(() => {
     if (!user || typeof EventSource === 'undefined') return
-    const source = new EventSource(ordersAPI.eventsUrl(), { withCredentials: true })
+    // EventSource can't send custom headers, so pass the JWT as a query param.
+    // The backend adminSecret middleware accepts ?token= as a fallback.
+    const sseToken = localStorage.getItem('admin_token') || Cookies.get('admin_token') || ''
+    const source = new EventSource(ordersAPI.eventsUrl(sseToken))
 
     source.addEventListener('order_created', (event) => {
       try {

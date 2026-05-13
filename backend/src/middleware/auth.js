@@ -33,9 +33,10 @@ export const adminOnly = [verifyToken, isAdmin]
 // Accepts admin password as Bearer token (for frontend admin panel)
 export function adminSecret(req, res, next) {
   const authHeader = req.headers.authorization
-  const token = authHeader?.startsWith('Bearer ')
-    ? authHeader.split(' ')[1]
-    : getCookie(req, 'admin_token')
+  // Priority: Authorization header → URL query param (SSE/EventSource can't set headers) → cookie
+  const token = (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null)
+    || req.query?.token
+    || getCookie(req, 'admin_token')
   if (!token) return res.status(401).json({ error: 'No token provided' })
   const secret = process.env.ADMIN_SECRET
   if (secret && token === secret) {
