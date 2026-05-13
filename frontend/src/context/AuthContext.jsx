@@ -32,16 +32,46 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem('rf_auth_user')
   }, [user])
 
-  // On mount: if Google user exists in localStorage but has no auth_token,
-  // clear the stale session to force a clean re-login that stores a real JWT
+  // On mount: if Google user has no auth_token (happened during a Render cold-start
+  // where the backend was unavailable at login time), try to silently re-fetch a JWT.
+  // We do NOT immediately log them out — that caused logout-on-every-reload.
   useEffect(() => {
     const saved = localStorage.getItem('rf_auth_user')
     if (!saved) return
     try {
       const u = JSON.parse(saved)
       if (u?.provider === 'google' && !localStorage.getItem('auth_token')) {
-        localStorage.removeItem('rf_auth_user')
-        setUser(null)
+        // Keep the user logged in. Attempt a silent re-auth via Google One Tap
+        // so we can get a real JWT from the backend.
+        // If the backend is still unavailable, the user stays logged in (no logout).
+        const tryReauth = () => {
+          if (!window.google?.accounts?.id) return
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: async (response) => {
+              try {
+                const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ credential: response.credential }),
+                })
+                const data = await res.json()
+                if (res.ok && data.token) {
+                  localStorage.setItem('auth_token', data.token)
+                  const payload = decodeJwt(response.credential)
+                  setUser({ ...data.user, avatar: payload?.picture, provider: 'google' })
+                  setTimeout(() => syncAllOrders(), 300)
+                }
+              } catch { /* silent — keep existing session */ }
+            },
+          })
+          window.google.accounts.id.prompt()
+        }
+        // Wait for Google SDK to load before attempting
+        const interval = setInterval(() => {
+          if (window.google?.accounts?.id) { clearInterval(interval); tryReauth() }
+        }, 300)
+        setTimeout(() => clearInterval(interval), 10000) // give up after 10s
       }
     } catch { /* ignore */ }
   }, []) // eslint-disable-line
@@ -91,8 +121,29 @@ export function AuthProvider({ children }) {
             return
           }
         } catch { /* fallback below */ }
-        // Fallback — backend down (no JWT stored, sync won't work across devices)
-        setUser({ uid: payload.sub, name: payload.name, email: payload.email, avatar: payload.picture, provider: 'google' })
+        // Backend was unavailable (Render cold start). Keep user logged in, then
+        // retry getting a real JWT in the background — Render typically wakes in 20-40s.
+        const partialUser = { uid: payload.sub, name: payload.name, email: payload.email, avatar: payload.picture, provider: 'google' }
+        setUser(partialUser)
+        ;(async () => {
+          for (let i = 0; i < 4; i++) {
+            await new Promise(r => setTimeout(r, 10000 * (i + 1))) // 10s, 20s, 30s, 40s
+            try {
+              const r2 = await fetch(`${BACKEND_URL}/api/auth/google`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: response.credential }),
+              })
+              const d2 = await r2.json()
+              if (r2.ok && d2.token) {
+                localStorage.setItem('auth_token', d2.token)
+                setUser({ ...d2.user, avatar: payload.picture, provider: 'google' })
+                setTimeout(() => syncAllOrders(), 300)
+                break
+              }
+            } catch { /* keep trying */ }
+          }
+        })()
         window.dispatchEvent(new CustomEvent('rf:login'))
       },
     })
