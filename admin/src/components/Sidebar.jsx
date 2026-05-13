@@ -7,7 +7,6 @@ import {
   Users, Tag, RefreshCw, BarChart2, Settings, LogOut, Leaf, Grid3X3, X,
   ChevronLeft, ChevronRight
 } from 'lucide-react'
-import Cookies from 'js-cookie'
 
 const nav = [
   { label:'Dashboard',     href:'/',                      icon: LayoutDashboard },
@@ -28,7 +27,9 @@ export default function Sidebar({ mobileOpen = true, onClose, collapsed = false,
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   function doLogout() {
-    Cookies.remove('admin_token')
+    // Clear cookie via server-side route (reliable — js-cookie removal can miss
+    // cookies set with attributes that differ from client defaults)
+    fetch('/api/set-token', { method: 'DELETE' }).catch(() => {})
     localStorage.removeItem('admin_token')
     window.location.href = '/login'
   }

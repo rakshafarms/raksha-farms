@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authAPI } from '../../lib/api'
-import Cookies from 'js-cookie'
 import { Leaf, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
@@ -22,7 +21,13 @@ export default function LoginPage() {
         setError('Access denied: admin accounts only')
         return
       }
-      Cookies.set('admin_token', data.token, { expires: 7 })
+      // Set cookie server-side (reliable for Next.js middleware on page refresh)
+      await fetch('/api/set-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: data.token }),
+      })
+      // Also keep in localStorage as fallback for client-side API requests
       localStorage.setItem('admin_token', data.token)
       router.replace('/')
     } catch (err) {
