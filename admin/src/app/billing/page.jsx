@@ -353,93 +353,100 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* ══ RIGHT: Bill Panel ════════════════════════════════════════════════ */}
-        <div className="w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-hidden">
+        {/* ══ RIGHT: Bill Panel — scrollable column ═══════════════════════════ */}
+        <div className="w-[440px] flex-shrink-0 overflow-y-auto flex flex-col gap-3 pb-3 pr-0.5">
 
-          {/* Customer */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2.5">
+          {/* ── Customer ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 flex-shrink-0">
             <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
               <User size={15} className="text-[#1B4332]"/> Customer Details
             </h3>
             <input value={customerName} onChange={e => setCustomerName(e.target.value)}
               placeholder="Customer name *"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+              className="w-full px-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
             <div className="relative">
-              <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+              <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
                 placeholder="Phone number (optional)" type="tel"
-                className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+                className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
             </div>
             <div className="relative">
-              <StickyNote size={13} className="absolute left-3 top-3 text-gray-400"/>
+              <StickyNote size={14} className="absolute left-3 top-3.5 text-gray-400"/>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="Notes (optional)" rows={2}
-                className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"/>
+                className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"/>
             </div>
           </div>
 
-          {/* Cart */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                <ShoppingBag size={15} className="text-[#1B4332]"/>
+          {/* ── Cart ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex-shrink-0">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
+                <ShoppingBag size={17} className="text-[#1B4332]"/>
                 Cart
-                {cartCount > 0 && <span className="ml-1 bg-[#1B4332] text-white text-[10px] font-black px-2 py-0.5 rounded-full">{cartCount}</span>}
+                {cartCount > 0 && (
+                  <span className="ml-1 bg-[#1B4332] text-white text-xs font-black px-2.5 py-0.5 rounded-full">{cartCount}</span>
+                )}
               </h3>
               {cart.length > 0 && (
-                <button onClick={() => setCart([])} className="text-xs text-red-400 hover:text-red-600 font-medium">Clear all</button>
+                <button onClick={() => setCart([])} className="text-xs text-red-400 hover:text-red-600 font-semibold">Clear all</button>
               )}
             </div>
 
             {cart.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-2">
-                <ShoppingBag size={36}/>
-                <p className="text-xs">Tap a product to add</p>
+              <div className="flex flex-col items-center justify-center py-10 text-gray-300 gap-2">
+                <ShoppingBag size={40}/>
+                <p className="text-sm">Tap a product to add</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+              <div className="space-y-3">
                 {cart.map(item => (
-                  <div key={item.id} className="bg-gray-50 rounded-xl p-2.5 flex gap-2">
-                    {/* Product image thumbnail */}
-                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                  <div key={item.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 flex gap-3">
+                    {/* Product image — bigger thumbnail */}
+                    <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
                       {item.image
                         ? <img src={item.image} alt={item.name}
                             className="w-full h-full object-cover"
                             onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }}
                           />
                         : null}
-                      <div className={`w-full h-full items-center justify-center text-xl ${item.image ? 'hidden' : 'flex'}`}>🌿</div>
+                      <div className={`w-full h-full items-center justify-center text-2xl ${item.image ? 'hidden' : 'flex'}`}>🌿</div>
                     </div>
+
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate leading-tight">{item.name}</p>
-                      {item.unit && <p className="text-[10px] text-gray-400">{item.unit}</p>}
-                      {/* Editable price */}
-                      <div className="flex items-center gap-1 mt-1">
-                        <span className="text-[10px] text-gray-400">₹</span>
+                      <p className="text-sm font-bold text-gray-800 leading-tight mb-0.5">{item.name}</p>
+                      {item.unit && <p className="text-xs text-gray-400 mb-2">{item.unit}</p>}
+
+                      {/* Price row */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-400 font-medium">₹</span>
                         <input type="number" value={item.price}
                           onChange={e => setItemPrice(item.id, e.target.value)}
-                          className="w-16 text-xs border border-gray-200 bg-white rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
+                          className="w-20 text-sm font-semibold border border-gray-200 bg-white rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
                           min={0} step={0.5}/>
-                        <span className="text-[10px] text-gray-500 ml-0.5 font-semibold">= {fmtRs(item.price * item.qty)}</span>
+                        <span className="text-xs text-gray-500 font-bold">= {fmtRs(item.price * item.qty)}</span>
                       </div>
                     </div>
-                    {/* Qty + remove */}
-                    <div className="flex flex-col items-end gap-1.5">
-                      <button onClick={() => removeItem(item.id)} className="text-red-300 hover:text-red-500">
-                        <X size={12}/>
+
+                    {/* Qty controls + remove */}
+                    <div className="flex flex-col items-end justify-between">
+                      <button onClick={() => removeItem(item.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors">
+                        <X size={13}/>
                       </button>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 mt-2">
                         <button onClick={() => changeQty(item.id, -1)}
-                          className="w-5 h-5 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
-                          <Minus size={9}/>
+                          className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
+                          <Minus size={11}/>
                         </button>
                         <input type="number" value={item.qty}
                           onChange={e => setItemQty(item.id, e.target.value)}
-                          className="w-7 text-center text-xs border border-gray-200 bg-white rounded focus:outline-none"
+                          className="w-9 text-center text-sm font-bold border border-gray-200 bg-white rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
                           min={1} max={item.stock}/>
                         <button onClick={() => changeQty(item.id, 1)}
-                          className="w-5 h-5 rounded-md bg-[#1B4332] hover:bg-[#163826] text-white flex items-center justify-center">
-                          <Plus size={9}/>
+                          className="w-7 h-7 rounded-lg bg-[#1B4332] hover:bg-[#163826] text-white flex items-center justify-center transition-colors">
+                          <Plus size={11}/>
                         </button>
                       </div>
                     </div>
@@ -449,56 +456,62 @@ export default function BillingPage() {
             )}
           </div>
 
-          {/* Payment + Totals + Action */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+          {/* ── Payment + Totals + Bill button ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4 flex-shrink-0">
+
             {/* Payment method */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {PAY.map(m => (
-                <button key={m.value} onClick={() => setPayMethod(m.value)}
-                  className={`py-2 rounded-xl text-[11px] font-bold border-2 transition flex flex-col items-center gap-0.5
-                    ${payMethod === m.value ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#1B4332]'}`}>
-                  <span>{m.emoji}</span>
-                  <span>{m.label}</span>
-                </button>
-              ))}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment Method</p>
+              <div className="grid grid-cols-4 gap-2">
+                {PAY.map(m => (
+                  <button key={m.value} onClick={() => setPayMethod(m.value)}
+                    className={`py-3 rounded-xl text-xs font-bold border-2 transition flex flex-col items-center gap-1
+                      ${payMethod === m.value
+                        ? 'bg-[#1B4332] text-white border-[#1B4332] shadow-md'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-[#1B4332] hover:text-[#1B4332]'}`}>
+                    <span className="text-base">{m.emoji}</span>
+                    <span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Discount */}
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-              <Tag size={13} className="text-amber-600 flex-shrink-0"/>
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              <Tag size={15} className="text-amber-600 flex-shrink-0"/>
               <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
                 placeholder="Discount (₹)" min={0}
-                className="flex-1 bg-transparent text-sm focus:outline-none text-amber-800 placeholder-amber-400 font-medium"/>
-              {discAmt > 0 && <span className="text-xs font-bold text-amber-700">−{fmtRs(discAmt)}</span>}
+                className="flex-1 bg-transparent text-sm focus:outline-none text-amber-800 placeholder-amber-400 font-semibold"/>
+              {discAmt > 0 && <span className="text-sm font-bold text-amber-700">−{fmtRs(discAmt)}</span>}
             </div>
 
             {/* Totals */}
-            <div className="space-y-1 text-sm">
+            <div className="bg-gray-50 rounded-xl p-3 space-y-2 text-sm">
               <div className="flex justify-between text-gray-500">
-                <span>{cart.reduce((s,i)=>s+i.qty,0)} items</span>
-                <span>{fmtRs(subtotal)}</span>
+                <span>{cart.reduce((s,i)=>s+i.qty,0)} item{cart.reduce((s,i)=>s+i.qty,0)!==1?'s':''}</span>
+                <span className="font-medium">{fmtRs(subtotal)}</span>
               </div>
               {discAmt > 0 && (
-                <div className="flex justify-between text-red-500 font-medium">
+                <div className="flex justify-between text-red-500 font-semibold">
                   <span>Discount</span><span>− {fmtRs(discAmt)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-black text-xl text-[#1B4332] border-t-2 border-dashed pt-2 mt-1">
+              <div className="flex justify-between font-black text-2xl text-[#1B4332] border-t-2 border-dashed pt-2 mt-1">
                 <span>Total</span><span>{fmtRs(total)}</span>
               </div>
             </div>
 
             {error && (
-              <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{error}</p>
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl">{error}</p>
             )}
 
             <button onClick={handleBill}
               disabled={submitting || !cart.length || !customerName.trim()}
-              className="w-full py-4 bg-gradient-to-r from-[#1B4332] to-[#2d6a4f] text-white rounded-2xl font-black text-base shadow-lg hover:shadow-xl hover:from-[#163826] hover:to-[#256041] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              className="w-full py-4 bg-gradient-to-r from-[#1B4332] to-[#2d6a4f] text-white rounded-2xl font-black text-lg shadow-lg hover:shadow-xl hover:from-[#163826] hover:to-[#256041] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {submitting ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Processing…</>
+                <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/> Processing…</>
               ) : (
-                <><Printer size={18}/> Bill &amp; Print {total > 0 ? fmtRs(total) : ''}</>
+                <><Printer size={20}/> Bill &amp; Print {total > 0 ? fmtRs(total) : ''}</>
               )}
             </button>
           </div>
