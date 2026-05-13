@@ -45,8 +45,11 @@ export default function LoginPage() {
         body: JSON.stringify({ token: t }),
       }).catch(() => {})
 
-      // Navigate to dashboard
-      window.location.replace('/')
+      // Use client-side navigation — this does NOT make an HTTP request,
+      // so there is zero chance of any server redirect intercepting it.
+      // window.location.replace('/') was making a full GET / which could
+      // be caught by Vercel's edge and redirected before the page loaded.
+      router.replace('/')
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed')
     } finally { setLoading(false) }
@@ -93,7 +96,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Admin access only · v2.3
+          Admin access only · v2.4
         </p>
       </div>
     </div>

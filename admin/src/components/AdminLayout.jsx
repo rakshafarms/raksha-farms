@@ -40,19 +40,33 @@ export default function AdminLayout({ children, title }) {
   const bellRef           = useRef(null)
 
   useEffect(() => {
-    // Check every storage layer in priority order
-    const token = localStorage.getItem('admin_token')
-      || sessionStorage.getItem('admin_token')
-      || Cookies.get('admin_token')
-    if (!token) { window.location.replace('/login'); return }
-    try {
-      // JWT uses base64url (- and _ instead of + and /). atob() only handles
-      // standard base64, so we must convert before decoding.
-      const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-      const payload = JSON.parse(atob(b64))
-      if (!payload?.id) { window.location.replace('/login'); return }
-      setUser(payload)
-    } catch { window.location.replace('/login') }
+    function getToken() {
+      return localStorage.getItem('admin_token')
+        || sessionStorage.getItem('admin_token')
+        || Cookies.get('admin_token')
+    }
+
+    function tryAuth(token) {
+      if (!token) return false
+      try {
+        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+        const payload = JSON.parse(atob(b64))
+        if (!payload?.id) return false
+        setUser(payload)
+        return true
+      } catch { return false }
+    }
+
+    // First attempt
+    if (tryAuth(getToken())) return
+
+    // Second attempt after 300ms — handles any browser storage async quirks
+    const timer = setTimeout(() => {
+      if (!tryAuth(getToken())) {
+        window.location.replace('/login')
+      }
+    }, 300)
+    return () => clearTimeout(timer)
   }, [])
 
   useEffect(() => {
