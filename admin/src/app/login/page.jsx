@@ -21,22 +21,31 @@ export default function LoginPage() {
         setError('Access denied: admin accounts only')
         return
       }
-      // Store in localStorage — this persists across refreshes and is the
-      // primary auth source for AdminLayout.
-      localStorage.setItem('admin_token', data.token)
-      // Set cookie directly via document.cookie — synchronous, guaranteed to be in
-      // the browser BEFORE window.location.replace fires the HTTP request.
-      // This is the most primitive and most reliable method; it bypasses any
-      // race conditions with fetch(/api/set-token) completing after the redirect.
-      const cookieExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString()
-      document.cookie = `admin_token=${data.token}; expires=${cookieExpiry}; path=/; SameSite=Lax`
-      // Also persist via server-side route for completeness (non-blocking)
+      const t = data.token
+
+      // Write to every possible storage so AdminLayout always finds it on refresh
+      localStorage.setItem('admin_token', t)
+      sessionStorage.setItem('admin_token', t) // backup if localStorage is blocked
+
+      // Synchronous cookie (must happen before the HTTP redirect below)
+      const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString()
+      document.cookie = `admin_token=${t}; expires=${exp}; path=/; SameSite=Lax`
+
+      // Verify the writes actually landed before navigating
+      const stored = localStorage.getItem('admin_token')
+      if (!stored) {
+        setError('Storage write failed — please allow cookies/localStorage and try again.')
+        return
+      }
+
+      // Server-side cookie (non-blocking, best-effort)
       fetch('/api/set-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: data.token }),
+        body: JSON.stringify({ token: t }),
       }).catch(() => {})
-      // Full navigation so AdminLayout reads a fresh localStorage on the new page
+
+      // Navigate to dashboard
       window.location.replace('/')
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed')
@@ -84,7 +93,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Admin access only · v2.2
+          Admin access only · v2.3
         </p>
       </div>
     </div>

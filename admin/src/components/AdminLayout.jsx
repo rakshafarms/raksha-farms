@@ -40,9 +40,10 @@ export default function AdminLayout({ children, title }) {
   const bellRef           = useRef(null)
 
   useEffect(() => {
-    // localStorage is the source of truth — always persists across refreshes.
-    // Cookie is a bonus for server-side middleware; localStorage is what matters here.
-    const token = localStorage.getItem('admin_token') || Cookies.get('admin_token')
+    // Check every storage layer in priority order
+    const token = localStorage.getItem('admin_token')
+      || sessionStorage.getItem('admin_token')
+      || Cookies.get('admin_token')
     if (!token) { window.location.replace('/login'); return }
     try {
       // JWT uses base64url (- and _ instead of + and /). atob() only handles
@@ -101,7 +102,7 @@ export default function AdminLayout({ children, title }) {
     if (!user || typeof EventSource === 'undefined') return
     // EventSource can't send custom headers, so pass the JWT as a query param.
     // The backend adminSecret middleware accepts ?token= as a fallback.
-    const sseToken = localStorage.getItem('admin_token') || Cookies.get('admin_token') || ''
+    const sseToken = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token') || Cookies.get('admin_token') || ''
     const source = new EventSource(ordersAPI.eventsUrl(sseToken))
 
     source.addEventListener('order_created', (event) => {
