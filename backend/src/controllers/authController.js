@@ -116,12 +116,20 @@ export async function googleAuth(req, res) {
     let { rows } = await query('SELECT * FROM users WHERE email = $1', [payload.email.toLowerCase()])
     let user = rows[0]
     if (!user) {
+      // New Google user — create account
       const hashed = await bcrypt.hash(`google_${payload.sub}`, 10)
       const { rows: created } = await query(
         `INSERT INTO users (name, email, password, role) VALUES ($1,$2,$3,'user') RETURNING *`,
         [payload.name || payload.email.split('@')[0], payload.email.toLowerCase(), hashed]
       )
       user = created[0]
+    } else if (payload.name && payload.name !== user.name && !user.password?.startsWith('$2')) {
+      // Existing Google-only user whose name may have changed in their Google account — sync it
+      const { rows: updated } = await query(
+        `UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [payload.name, user.id]
+      )
+      if (updated[0]) user = updated[0]
     }
 
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })

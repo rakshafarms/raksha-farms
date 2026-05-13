@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
   Package, Clock, CreditCard, Smartphone, Banknote,
-  Calendar, Printer, FileSpreadsheet
+  Calendar, Printer, FileSpreadsheet, Bell
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -371,9 +371,33 @@ export default function OrdersPage() {
   const [downloading, setDownloading] = useState(false)
   const [toast, setToast]           = useState(null)
   const [tick, setTick]             = useState(0)
+  const [newOrderBanner, setNewOrderBanner] = useState(false)
   const filtersRef = useRef({ page, status, search, fromDate, toDate })
 
   useEffect(() => { filtersRef.current = { page, status, search, fromDate, toDate } }, [page, status, search, fromDate, toDate])
+
+  // ── Auto-poll: check for new orders every 30 s ─────────────────────────────
+  const latestOrderTimeRef = useRef(null)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        // Fetch just the most recent order (limit=1) to check if something new arrived
+        const { data } = await ordersAPI.getAll({ page: 1, limit: 1 })
+        const newest = data.orders?.[0]
+        if (!newest) return
+        if (latestOrderTimeRef.current === null) {
+          // First poll — just record the baseline
+          latestOrderTimeRef.current = newest.created_at
+          return
+        }
+        if (newest.created_at !== latestOrderTimeRef.current) {
+          latestOrderTimeRef.current = newest.created_at
+          setNewOrderBanner(true)
+        }
+      } catch { /* ignore network errors */ }
+    }, 30_000) // every 30 seconds
+    return () => clearInterval(interval)
+  }, []) // eslint-disable-line
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -407,7 +431,12 @@ export default function OrdersPage() {
 
   useEffect(() => { load() }, [page, status, fromDate, toDate, tick, load])
 
-  function forceReload() { setTick(t => t + 1) }
+  function forceReload() {
+    setNewOrderBanner(false)
+    // Reset baseline so the next poll doesn't re-trigger for the same order
+    latestOrderTimeRef.current = null
+    setTick(t => t + 1)
+  }
   function applySearch() { setPage(1); load({ page:1, search }) }
   function changeFilter(key, val) {
     setPage(1)
@@ -581,6 +610,23 @@ export default function OrdersPage() {
           ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-500'}`}>
           {toast.type === 'success' ? <CheckCircle size={15}/> : <AlertTriangle size={15}/>}
           {toast.msg}
+        </div>
+      )}
+
+      {/* ── New order notification banner ── */}
+      {newOrderBanner && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-5 py-3 bg-[#1B4332] text-white rounded-2xl shadow-2xl animate-in slide-in-from-top-2">
+          <Bell size={16} className="animate-bounce flex-shrink-0"/>
+          <span className="text-sm font-semibold">New order received!</span>
+          <button
+            onClick={forceReload}
+            className="ml-1 px-3 py-1.5 bg-white text-[#1B4332] text-xs font-bold rounded-xl hover:bg-green-50 transition-colors"
+          >
+            View now
+          </button>
+          <button onClick={() => setNewOrderBanner(false)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+            <X size={14}/>
+          </button>
         </div>
       )}
 

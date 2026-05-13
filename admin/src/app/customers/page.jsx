@@ -31,7 +31,6 @@ const timeAgo = (iso) => {
   return `${Math.floor(d/365)}y ago`
 }
 
-// Deterministic avatar color from name
 const AVATAR_COLORS = [
   'from-blue-500 to-blue-700', 'from-violet-500 to-violet-700',
   'from-emerald-500 to-emerald-700', 'from-rose-500 to-rose-700',
@@ -43,7 +42,7 @@ const avatarColor = (name = '') =>
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function Stat({ label, value, icon, color }) {
   return (
-    <div className={`bg-white rounded-2xl px-5 py-4 border border-gray-100 shadow-sm flex items-center gap-4`}>
+    <div className="bg-white rounded-2xl px-5 py-4 border border-gray-100 shadow-sm flex items-center gap-4">
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
         {icon}
       </div>
@@ -59,13 +58,17 @@ function Stat({ label, value, icon, color }) {
 function OrderDrawer({ customer, onClose }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const isGuest = customer.customer_type === 'guest'
 
   useEffect(() => {
-    customersAPI.getOrders(customer.id)
+    const fetch = isGuest
+      ? customersAPI.getGuestOrders(customer.phone)
+      : customersAPI.getOrders(customer.id)
+    fetch
       .then(r => setOrders(r.data))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [customer.id])
+  }, [customer.id, customer.phone, isGuest])
 
   const STATUS_PILL = {
     placed:           'bg-blue-50 text-blue-700',
@@ -89,11 +92,18 @@ function OrderDrawer({ customer, onClose }) {
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarColor(customer.name)} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-            {customer.name?.[0]?.toUpperCase()}
+            {customer.name?.[0]?.toUpperCase() || '?'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-gray-900 truncate">{customer.name}</p>
-            <p className="text-xs text-gray-400 truncate">{customer.email}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-gray-900 truncate">{customer.name || 'Unknown'}</p>
+              {isGuest && (
+                <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                  Guest
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 truncate">{customer.email || customer.phone || '—'}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors flex-shrink-0">
             <X size={16}/>
@@ -113,6 +123,17 @@ function OrderDrawer({ customer, onClose }) {
             </div>
           ))}
         </div>
+
+        {/* Contact info for guest */}
+        {isGuest && customer.phone && (
+          <div className="px-5 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-sm">
+            <Phone size={13} className="text-amber-600 flex-shrink-0"/>
+            <a href={`tel:+91${customer.phone.replace(/\D/g,'').slice(-10)}`} className="text-amber-700 font-semibold hover:underline">
+              +91 {customer.phone.replace(/\D/g,'').slice(-10)}
+            </a>
+            <span className="ml-auto text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-bold">No account</span>
+          </div>
+        )}
 
         {/* Order list */}
         <div className="flex-1 overflow-y-auto">
@@ -168,7 +189,7 @@ export default function CustomersPage() {
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('')   // '' | 'active' | 'blocked'
   const [loading, setLoading]     = useState(true)
-  const [drawer, setDrawer]       = useState(null) // customer obj
+  const [drawer, setDrawer]       = useState(null)
 
   const load = useCallback(async (overrides = {}) => {
     setLoading(true)
@@ -209,9 +230,9 @@ export default function CustomersPage() {
 
       {/* ── Stats ── */}
       <div className="grid grid-cols-3 gap-4 mb-5">
-        <Stat label="Total Customers" value={stats.total || 0}   icon={<Users size={20} className="text-white"/>}  color="bg-gradient-to-br from-[#1B4332] to-emerald-600"/>
-        <Stat label="Active"          value={stats.active || 0}  icon={<Shield size={20} className="text-white"/>} color="bg-gradient-to-br from-blue-500 to-blue-700"/>
-        <Stat label="Blocked"         value={stats.blocked || 0} icon={<Ban size={20} className="text-white"/>}    color="bg-gradient-to-br from-red-500 to-red-700"/>
+        <Stat label="Registered Users" value={stats.total || 0}   icon={<Users size={20} className="text-white"/>}  color="bg-gradient-to-br from-[#1B4332] to-emerald-600"/>
+        <Stat label="Active"           value={stats.active || 0}  icon={<Shield size={20} className="text-white"/>} color="bg-gradient-to-br from-blue-500 to-blue-700"/>
+        <Stat label="Blocked"          value={stats.blocked || 0} icon={<Ban size={20} className="text-white"/>}    color="bg-gradient-to-br from-red-500 to-red-700"/>
       </div>
 
       {/* ── Filters ── */}
@@ -261,77 +282,96 @@ export default function CustomersPage() {
                 <Users size={32} className="mx-auto mb-2 opacity-20"/>
                 <p className="text-sm">No customers found</p>
               </td></tr>
-            ) : customers.map(c => (
-              <tr key={c.id}
-                onClick={() => setDrawer(c)}
-                className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
+            ) : customers.map((c, idx) => {
+              const isGuest = c.customer_type === 'guest'
+              return (
+                <tr key={c.id || `guest-${c.phone}-${idx}`}
+                  onClick={() => setDrawer(c)}
+                  className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
 
-                {/* Avatar + name */}
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${avatarColor(c.name)} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
-                      {c.name?.[0]?.toUpperCase()}
+                  {/* Avatar + name */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${avatarColor(c.name)} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+                        {c.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-gray-900 truncate">{c.name || '—'}</p>
+                          {isGuest && (
+                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                              Guest
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 truncate max-w-[180px]">{c.email || '—'}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate">{c.name}</p>
-                      <p className="text-xs text-gray-400 truncate max-w-[180px]">{c.email}</p>
-                    </div>
-                  </div>
-                </td>
+                  </td>
 
-                {/* Contact */}
-                <td className="px-4 py-3.5">
-                  {c.phone
-                    ? <span className="flex items-center gap-1.5 text-xs text-gray-600"><Phone size={11} className="text-gray-400"/>{c.phone}</span>
-                    : <span className="text-gray-300 text-xs">—</span>
-                  }
-                </td>
+                  {/* Contact */}
+                  <td className="px-4 py-3.5">
+                    {c.phone
+                      ? <span className="flex items-center gap-1.5 text-xs text-gray-600"><Phone size={11} className="text-gray-400"/>{c.phone}</span>
+                      : <span className="text-gray-300 text-xs">—</span>
+                    }
+                  </td>
 
-                {/* Orders */}
-                <td className="px-4 py-3.5 text-right">
-                  <span className="font-bold text-gray-900">{c.total_orders}</span>
-                </td>
+                  {/* Orders */}
+                  <td className="px-4 py-3.5 text-right">
+                    <span className="font-bold text-gray-900">{c.total_orders}</span>
+                  </td>
 
-                {/* Spent */}
-                <td className="px-4 py-3.5 text-right">
-                  <span className="font-bold text-emerald-700">{fmt(c.total_spent)}</span>
-                </td>
+                  {/* Spent */}
+                  <td className="px-4 py-3.5 text-right">
+                    <span className="font-bold text-emerald-700">{fmt(c.total_spent)}</span>
+                  </td>
 
-                {/* Last order */}
-                <td className="px-4 py-3.5">
-                  <span className="text-xs text-gray-500">{timeAgo(c.last_order_at)}</span>
-                </td>
+                  {/* Last order */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs text-gray-500">{timeAgo(c.last_order_at)}</span>
+                  </td>
 
-                {/* Joined */}
-                <td className="px-4 py-3.5">
-                  <span className="text-xs text-gray-400">{fmtDate(c.created_at)}</span>
-                </td>
+                  {/* Joined */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs text-gray-400">{fmtDate(c.created_at)}</span>
+                  </td>
 
-                {/* Status */}
-                <td className="px-4 py-3.5 text-center">
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                    c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${c.is_active ? 'bg-emerald-500' : 'bg-red-500'}`}/>
-                    {c.is_active ? 'Active' : 'Blocked'}
-                  </span>
-                </td>
+                  {/* Status */}
+                  <td className="px-4 py-3.5 text-center">
+                    {isGuest ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"/>
+                        Guest
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${c.is_active ? 'bg-emerald-500' : 'bg-red-500'}`}/>
+                        {c.is_active ? 'Active' : 'Blocked'}
+                      </span>
+                    )}
+                  </td>
 
-                {/* Action */}
-                <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => toggle(c.id)}
-                    title={c.is_active ? 'Block customer' : 'Unblock customer'}
-                    className={`p-2 rounded-xl transition-colors ${
-                      c.is_active
-                        ? 'text-red-400 hover:bg-red-50 hover:text-red-600'
-                        : 'text-emerald-500 hover:bg-emerald-50 hover:text-emerald-700'
-                    }`}>
-                    {c.is_active ? <UserX size={15}/> : <UserCheck size={15}/>}
-                  </button>
-                </td>
-              </tr>
-            ))}
+                  {/* Action — only for registered users */}
+                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                    {!isGuest && (
+                      <button
+                        onClick={() => toggle(c.id)}
+                        title={c.is_active ? 'Block customer' : 'Unblock customer'}
+                        className={`p-2 rounded-xl transition-colors ${
+                          c.is_active
+                            ? 'text-red-400 hover:bg-red-50 hover:text-red-600'
+                            : 'text-emerald-500 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}>
+                        {c.is_active ? <UserX size={15}/> : <UserCheck size={15}/>}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 

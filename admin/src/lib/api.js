@@ -71,6 +71,7 @@ export const analyticsAPI = {
 export const customersAPI = {
   getAll: (params) => api.get('/customers', { params }),
   getOrders: (id) => api.get(`/customers/${id}/orders`),
+  getGuestOrders: (phone) => api.get(`/customers/guest/${encodeURIComponent(phone)}/orders`),
   toggle: (id) => api.patch(`/customers/${id}/toggle`),
 }
 

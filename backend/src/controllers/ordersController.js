@@ -283,6 +283,23 @@ export async function createOrder(req, res) {
 
     await client.query('COMMIT')
     broadcastOrderCreated(order)
+
+    // ── Sync customer profile from order address (non-fatal) ─────────────────
+    // Google-login users have no phone in their profile. If the order address
+    // includes a phone (always entered at checkout), save it back so the
+    // admin Customers section shows the correct contact info.
+    if (userId && (address.phone || address.name)) {
+      query(
+        `UPDATE users
+         SET
+           phone = COALESCE(NULLIF(phone,''), $1),
+           name  = CASE WHEN name IS NULL OR name = '' THEN COALESCE($2, name) ELSE name END,
+           updated_at = NOW()
+         WHERE id = $3`,
+        [address.phone || null, address.name || null, userId]
+      ).catch(() => {}) // never block the response for a profile update
+    }
+
     res.status(201).json(order)
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
