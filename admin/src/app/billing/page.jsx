@@ -293,7 +293,7 @@ export default function BillingPage() {
                 <p className="text-sm">No products found</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-4 2xl:grid-cols-5 gap-2 pr-1">
+              <div className="grid grid-cols-3 gap-2 pr-1">
                 {filtered.map(p => {
                   const price      = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
                   const hasOffer   = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
@@ -315,8 +315,8 @@ export default function BillingPage() {
                         </div>
                       )}
 
-                      {/* Image — fixed height instead of aspect-square so it's compact */}
-                      <div className="h-24 bg-gray-50 overflow-hidden">
+                      {/* Image */}
+                      <div className="h-28 bg-gray-50 overflow-hidden">
                         {imgSrc(p.image_url) ? (
                           <img src={imgSrc(p.image_url)} alt={p.name}
                             className="w-full h-full object-cover"
