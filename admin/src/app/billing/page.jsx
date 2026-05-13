@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
-import { productsAPI, ordersAPI } from '../../lib/api'
+import { productsAPI, ordersAPI, API_BASE_URL } from '../../lib/api'
 import {
   Search, Plus, Minus, Trash2, Printer, ShoppingBag,
   User, Phone, IndianRupee, Tag, CheckCircle2, X,
@@ -15,8 +15,10 @@ const PAY = [
   { value: 'credit', label: 'Credit', emoji: '📒' },
 ]
 
-const fmt   = (n) => Number(n || 0).toLocaleString('en-IN')
-const fmtRs = (n) => `₹${fmt(n)}`
+const fmt    = (n) => Number(n || 0).toLocaleString('en-IN')
+const fmtRs  = (n) => `₹${fmt(n)}`
+// image_url is stored as "/uploads/file.jpg" — prefix with API base when not already absolute
+const imgSrc = (url) => !url ? null : url.startsWith('http') ? url : `${API_BASE_URL}${url}`
 
 export default function BillingPage() {
   const [products,   setProducts]   = useState([])
@@ -73,7 +75,7 @@ export default function BillingPage() {
       }
       const price = p.offer_price && Number(p.offer_price) > 0
         ? Number(p.offer_price) : Number(p.price)
-      return [...prev, { id: p.id, name: p.name, unit: p.unit, price, qty: 1, stock: Number(p.stock), image: p.image_url }]
+      return [...prev, { id: p.id, name: p.name, unit: p.unit, price, qty: 1, stock: Number(p.stock), image: imgSrc(p.image_url) }]
     })
   }
 
@@ -305,8 +307,8 @@ export default function BillingPage() {
 
                       {/* Image */}
                       <div className="aspect-square bg-gray-50 overflow-hidden">
-                        {p.image_url ? (
-                          <img src={p.image_url} alt={p.name}
+                        {imgSrc(p.image_url) ? (
+                          <img src={imgSrc(p.image_url)} alt={p.name}
                             className="w-full h-full object-cover"
                             onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-3xl">🌿</div>' }}
                           />
@@ -389,12 +391,15 @@ export default function BillingPage() {
                 {cart.map(item => (
                   <div key={item.id} className="bg-gray-50 rounded-xl p-2.5 flex gap-2">
                     {/* Product image thumbnail */}
-                    {item.image && (
-                      <img src={item.image} alt={item.name}
-                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                        onError={e => { e.target.style.display = 'none' }}
-                      />
-                    )}
+                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                      {item.image
+                        ? <img src={item.image} alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }}
+                          />
+                        : null}
+                      <div className={`w-full h-full items-center justify-center text-xl ${item.image ? 'hidden' : 'flex'}`}>🌿</div>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-gray-800 truncate leading-tight">{item.name}</p>
                       {item.unit && <p className="text-[10px] text-gray-400">{item.unit}</p>}
