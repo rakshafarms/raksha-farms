@@ -77,8 +77,9 @@ export default function ProfilePage() {
   const [cancelConfirmId, setCancelConfirmId] = useState(null)
   const [ordersLoading, setOrdersLoading]     = useState(true)
   const [sessionExpired, setSessionExpired]   = useState(false)
+  const [needsReauth, setNeedsReauth]         = useState(false)
 
-  // Sync on mount and listen for session-expired / auth-failed events
+  // Sync on mount and listen for session-expired / auth-failed events.
   useEffect(() => {
     function onExpired() { setSessionExpired(true); setOrdersLoading(false) }
     window.addEventListener('rf:session-expired', onExpired)
@@ -90,25 +91,36 @@ export default function ProfilePage() {
       const token = localStorage.getItem('auth_token')
       if (token) {
         await syncOrdersByUser().catch(() => {})
+        setOrdersLoading(false)
       } else if (user) {
-        // No token yet — give background Google auth retry up to 12 s
-        let waited = 0
-        while (waited < 12000) {
+        // No token yet — Google background re-auth is in progress.
+        // Poll for up to 50 s waiting for token. If it arrives, sync immediately.
+        const started = Date.now()
+        let gotToken = false
+        while (Date.now() - started < 50000) {
           await new Promise(r => setTimeout(r, 2000))
-          waited += 2000
           if (localStorage.getItem('auth_token')) {
             await syncOrdersByUser().catch(() => {})
+            gotToken = true
             break
           }
         }
-        if (!localStorage.getItem('auth_token')) setSessionExpired(true)
+        // After 50 s with no token → Google One Tap was suppressed or failed.
+        // Show a friendly "sign in again" prompt instead of leaving orders empty.
+        if (!gotToken && !localStorage.getItem('auth_token')) setNeedsReauth(true)
+        setOrdersLoading(false)
+      } else {
+        setOrdersLoading(false)
       }
-
-      setOrdersLoading(false)
     }
     init()
 
+    // Also dismiss loading skeleton after 8 s max so the page isn't frozen.
+    // The token polling continues in the background and will update orders.
+    const t = setTimeout(() => setOrdersLoading(false), 8000)
+
     return () => {
+      clearTimeout(t)
       window.removeEventListener('rf:session-expired', onExpired)
       window.removeEventListener('rf:auth-failed',     onExpired)
     }
@@ -247,19 +259,19 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* Session expired banner */}
-      {sessionExpired && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-5">
+      {/* Sign-in prompt — shown when token is missing (Google One Tap suppressed or real 401) */}
+      {(sessionExpired || needsReauth) && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 mb-5">
           <div className="flex items-start gap-3 mb-4">
-            <span className="text-2xl flex-shrink-0">🔒</span>
+            <span className="text-2xl flex-shrink-0">🔑</span>
             <div>
-              <p className="font-bold text-amber-800">Session expired</p>
-              <p className="text-amber-700 text-sm mt-0.5">Your login session has ended. Sign in again to see your orders, addresses, and subscriptions.</p>
+              <p className="font-bold text-blue-800">Sign in to see your orders</p>
+              <p className="text-blue-700 text-sm mt-0.5">Quick sign-in with Google to load your {user?.provider === 'google' ? 'Google account' : 'account'} orders and history.</p>
             </div>
           </div>
           <button onClick={() => { logout(); navigate('/login') }}
-            className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-sm">
-            Sign In Again →
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm">
+            Sign In with Google →
           </button>
         </div>
       )}

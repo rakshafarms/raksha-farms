@@ -47,6 +47,7 @@ export default function MyOrdersPage() {
   const [filter, setFilter]               = useState('all')
   const [syncing, setSyncing]             = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [needsReauth, setNeedsReauth]     = useState(false)
   const didSync = useRef(false)
 
   // Auto-hide skeleton after 8 s so user isn't stuck staring at it while
@@ -86,15 +87,18 @@ export default function MyOrdersPage() {
       // or rf:auth-failed events (real 401 or all retries exhausted).
       else if (user) {
         const started = Date.now()
+        let gotToken = false
         while (Date.now() - started < 50000) {          // wait up to 50 s
           await new Promise(r => setTimeout(r, 2000))
-          const t = localStorage.getItem('auth_token')
-          if (t) {
+          if (localStorage.getItem('auth_token')) {
             try { await syncOrdersByUser() } catch { /* silent */ }
+            gotToken = true
             break
           }
         }
-        // Do NOT call setSessionExpired here — the event listeners handle that.
+        // After 50 s with no token → Google One Tap was suppressed or failed.
+        // Show a friendly prompt; don't use the scary "session expired" wording.
+        if (!gotToken && !localStorage.getItem('auth_token')) setNeedsReauth(true)
       }
 
       if (isMount) setSyncing(false)
@@ -181,19 +185,19 @@ export default function MyOrdersPage() {
         </button>
       </div>
 
-      {/* Session expired banner */}
-      {sessionExpired && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-5">
+      {/* Sign-in prompt */}
+      {(sessionExpired || needsReauth) && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 mb-5">
           <div className="flex items-start gap-3 mb-4">
-            <span className="text-2xl flex-shrink-0">🔒</span>
+            <span className="text-2xl flex-shrink-0">🔑</span>
             <div>
-              <p className="font-bold text-amber-800">Session expired</p>
-              <p className="text-amber-700 text-sm mt-0.5">Your login session has ended. Sign in again to see all your orders.</p>
+              <p className="font-bold text-blue-800">Sign in to see your orders</p>
+              <p className="text-blue-700 text-sm mt-0.5">Quick sign-in with Google to load your full order history.</p>
             </div>
           </div>
           <Link to="/login"
-            className="block w-full py-3 text-center bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-sm">
-            Sign In Again →
+            className="block w-full py-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm">
+            Sign In with Google →
           </Link>
         </div>
       )}
