@@ -6,7 +6,7 @@ const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 const STATUS_MAP = {
   placed:           'pending',
   accepted:         'accepted',
-  preparing:        'accepted',
+  preparing:        'preparing',
   out_for_delivery: 'out_for_delivery',
   delivered:        'delivered',
   cancelled:        'cancelled',
