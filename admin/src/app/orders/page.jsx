@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
   Package, Clock, CreditCard, Smartphone, Banknote,
-  Calendar, Printer, FileSpreadsheet, Bell
+  Calendar, Printer, FileSpreadsheet, Bell, Store, Globe
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -72,6 +72,23 @@ function StatusPill({ status, isPartial }) {
   return <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${m.pill}`}>
     <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`}/>{m.label}
   </span>
+}
+
+// ── Order-type helpers ────────────────────────────────────────────────────────
+const isWalkIn = (o) => typeof o.reference_id === 'string' && o.reference_id.startsWith('WI-')
+
+function OrderTypeBadge({ order }) {
+  if (isWalkIn(order))
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200 flex-shrink-0">
+        <Store size={9}/> Walk-in
+      </span>
+    )
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 ring-1 ring-sky-200 flex-shrink-0">
+      <Globe size={9}/> Online
+    </span>
+  )
 }
 
 // ── Reject Modal ──────────────────────────────────────────────────────────────
@@ -161,19 +178,22 @@ function RejectModal({ order, onClose, onConfirm }) {
 
 // ── Order Row (expanded card) ──────────────────────────────────────────────────
 function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, onSelect }) {
-  const isOpen  = expanded === o.id
-  const addr    = parseAddr(o)
-  const notes   = parseNotes(o)
-  const partial = notes && o.status === 'accepted'
-  const isFinal = ['delivered','cancelled','rejected'].includes(o.status)
-  const phone   = addr.phone || o.customer_phone || ''
-  const name    = addr.name  || o.customer_name  || 'Guest'
+  const isOpen   = expanded === o.id
+  const addr     = parseAddr(o)
+  const notes    = parseNotes(o)
+  const partial  = notes && o.status === 'accepted'
+  const isFinal  = ['delivered','cancelled','rejected'].includes(o.status)
+  const walkIn   = isWalkIn(o)
+  const phone    = addr.phone || o.customer_phone || ''
+  const name     = addr.name  || o.customer_name  || 'Guest'
 
   return (
-    <div className={`border border-gray-100 rounded-2xl overflow-hidden transition-shadow hover:shadow-md ${isOpen ? 'shadow-md' : 'shadow-sm'}`}>
+    <div className={`rounded-2xl overflow-hidden transition-shadow hover:shadow-md border-l-4 ${
+      walkIn ? 'border-l-amber-400 border border-amber-100 bg-amber-50/30' : 'border-l-sky-400 border border-gray-100 bg-white'
+    } ${isOpen ? 'shadow-md' : 'shadow-sm'}`}>
       {/* ── Summary row ── */}
       <div
-        className="flex items-center gap-3 px-4 py-3.5 bg-white cursor-pointer select-none"
+        className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none ${walkIn ? 'bg-amber-50/40' : 'bg-white'}`}
         onClick={onToggle}
       >
         <input
@@ -186,15 +206,20 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
         />
 
         {/* Avatar */}
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#1B4332] to-emerald-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-          {name[0]?.toUpperCase()}
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
+          walkIn ? 'bg-gradient-to-br from-amber-500 to-orange-400' : 'bg-gradient-to-br from-[#1B4332] to-emerald-500'
+        }`}>
+          {walkIn ? <Store size={15}/> : name[0]?.toUpperCase()}
         </div>
 
-        {/* Name + time */}
+        {/* Name + time + type badge */}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{name}</p>
+            <OrderTypeBadge order={o}/>
+          </div>
           <p className="text-xs text-gray-400 mt-0.5">
-            <span className="font-mono font-bold text-gray-600">#{fmtOrderId(o.created_at)}</span>
+            <span className="font-mono font-bold text-gray-600">#{o.reference_id || fmtOrderId(o.created_at)}</span>
             <span className="mx-1">·</span>{fmtTime(o.created_at)}
           </p>
         </div>
@@ -257,7 +282,7 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
 
       {/* ── Expanded detail ── */}
       {isOpen && (
-        <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+        <div className={`border-t px-5 py-4 ${walkIn ? 'border-amber-100 bg-amber-50/40' : 'border-gray-100 bg-gray-50/60'}`}>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
 
             {/* Items list — 3 cols */}
@@ -306,43 +331,82 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
               </div>
             </div>
 
-            {/* Delivery info — 2 cols */}
+            {/* Right info panel — 2 cols */}
             <div className="md:col-span-2 space-y-3">
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Delivery Details</p>
-                <div className="bg-white border border-gray-100 rounded-xl p-3 space-y-2.5 text-sm">
-                  <div className="flex items-start gap-2">
-                    <Package size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
-                    <div>
-                      <p className="font-semibold text-gray-800">{addr.name || o.customer_name || '—'}</p>
-                      {o.customer_email && <p className="text-xs text-gray-400">{o.customer_email}</p>}
+              {walkIn ? (
+                /* ── Walk-in info ── */
+                <div>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Store size={12} className="text-amber-600"/>
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">Walk-in / Offline Sale</p>
+                  </div>
+                  <div className="bg-white border border-amber-200 rounded-xl p-3 space-y-2.5 text-sm">
+                    <div className="flex items-start gap-2">
+                      <Package size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                      <div>
+                        <p className="font-semibold text-gray-800">{o.customer_name || addr.name || '—'}</p>
+                        <p className="text-xs text-amber-600 font-medium mt-0.5">Walk-in Customer</p>
+                      </div>
+                    </div>
+                    {phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={13} className="text-gray-400 flex-shrink-0"/>
+                        <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`} className="text-gray-700 hover:text-[#1B4332] font-medium text-sm">{phone}</a>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={13} className="text-gray-400 flex-shrink-0"/>
+                      <span className="text-xs text-gray-600 capitalize font-medium">{o.payment_method || 'cash'} payment</span>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-amber-100">
+                      <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">No Delivery</span>
+                      <span className="text-[10px] text-gray-400">Collected in-store</span>
                     </div>
                   </div>
-                  {phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone size={13} className="text-gray-400 flex-shrink-0"/>
-                      <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`} className="text-gray-700 hover:text-[#1B4332] font-medium text-sm">{phone}</a>
-                    </div>
-                  )}
-                  {addr.address && (
-                    <div className="flex items-start gap-2">
-                      <MapPin size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
-                      <p className="text-gray-600 text-xs leading-relaxed">{addr.address}{addr.city ? `, ${addr.city}` : ''}{addr.pincode ? ` — ${addr.pincode}` : ''}</p>
-                    </div>
-                  )}
-                  {addr.slot && (
-                    <div className="flex items-center gap-2">
-                      <Clock size={13} className="text-gray-400 flex-shrink-0"/>
-                      <span className="text-xs text-gray-600">{addr.slot}</span>
-                    </div>
-                  )}
                 </div>
-              </div>
+              ) : (
+                /* ── Online order info ── */
+                <div>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Globe size={12} className="text-sky-600"/>
+                    <p className="text-xs font-bold text-sky-700 uppercase tracking-wider">Online Delivery Details</p>
+                  </div>
+                  <div className="bg-white border border-gray-100 rounded-xl p-3 space-y-2.5 text-sm">
+                    <div className="flex items-start gap-2">
+                      <Package size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                      <div>
+                        <p className="font-semibold text-gray-800">{addr.name || o.customer_name || '—'}</p>
+                        {o.customer_email && <p className="text-xs text-gray-400">{o.customer_email}</p>}
+                      </div>
+                    </div>
+                    {phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={13} className="text-gray-400 flex-shrink-0"/>
+                        <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`} className="text-gray-700 hover:text-[#1B4332] font-medium text-sm">{phone}</a>
+                      </div>
+                    )}
+                    {addr.address && (
+                      <div className="flex items-start gap-2">
+                        <MapPin size={13} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                        <p className="text-gray-600 text-xs leading-relaxed">{addr.address}{addr.city ? `, ${addr.city}` : ''}{addr.pincode ? ` — ${addr.pincode}` : ''}</p>
+                      </div>
+                    )}
+                    {addr.slot && (
+                      <div className="flex items-center gap-2">
+                        <Clock size={13} className="text-gray-400 flex-shrink-0"/>
+                        <span className="text-xs text-gray-600">{addr.slot}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-              {/* Quick call */}
+              {/* Quick call button */}
               {phone && (
                 <a href={`tel:+91${phone.replace(/\D/g,'').slice(-10)}`}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-[#1B4332] hover:bg-[#15362a] text-white text-xs font-bold rounded-xl transition-colors">
+                  className={`flex items-center justify-center gap-2 w-full py-2.5 text-white text-xs font-bold rounded-xl transition-colors ${
+                    walkIn ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#1B4332] hover:bg-[#15362a]'
+                  }`}>
                   <Phone size={13}/> Call Customer
                 </a>
               )}
@@ -361,6 +425,7 @@ export default function OrdersPage() {
   const [pages, setPages]           = useState(1)
   const [page, setPage]             = useState(1)
   const [status, setStatus]         = useState('')
+  const [source, setSource]         = useState('') // '' | 'online' | 'walkin'
   const [search, setSearch]         = useState('')
   const [fromDate, setFromDate]     = useState('')
   const [toDate, setToDate]         = useState('')
@@ -374,7 +439,7 @@ export default function OrdersPage() {
   const [newOrderBanner, setNewOrderBanner] = useState(false)
   const filtersRef = useRef({ page, status, search, fromDate, toDate })
 
-  useEffect(() => { filtersRef.current = { page, status, search, fromDate, toDate } }, [page, status, search, fromDate, toDate])
+  useEffect(() => { filtersRef.current = { page, status, source, search, fromDate, toDate } }, [page, status, source, search, fromDate, toDate])
 
   // ── Auto-poll: check for new orders every 30 s ─────────────────────────────
   const latestOrderTimeRef = useRef(null)
@@ -441,11 +506,12 @@ export default function OrdersPage() {
   function changeFilter(key, val) {
     setPage(1)
     if (key === 'status')   setStatus(val)
+    if (key === 'source')   setSource(val)
     if (key === 'fromDate') setFromDate(val)
     if (key === 'toDate')   setToDate(val)
   }
   function clearFilters() {
-    setStatus(''); setSearch(''); setFromDate(''); setToDate(''); setPage(1)
+    setStatus(''); setSource(''); setSearch(''); setFromDate(''); setToDate(''); setPage(1)
     forceReload()
   }
 
@@ -592,15 +658,23 @@ export default function OrdersPage() {
   // Group orders by IST date
   const grouped = []
   const seen = {}
-  for (const o of orders) {
+  for (const o of visibleOrders) {
     const label = dateGroupLabel(o.created_at)
     if (!seen[label]) { seen[label] = true; grouped.push({ label, orders:[] }) }
     grouped[grouped.length-1].orders.push(o)
   }
 
-  const activeFilters = [status, search, fromDate, toDate].filter(Boolean).length
-  const selectedOrders = orders.filter(o => selectedIds.has(o.id))
-  const allVisibleSelected = orders.length > 0 && selectedOrders.length === orders.length
+  const activeFilters = [status, source, search, fromDate, toDate].filter(Boolean).length
+
+  // Client-side source filter (online vs walk-in)
+  const visibleOrders = source === 'walkin'
+    ? orders.filter(o => isWalkIn(o))
+    : source === 'online'
+    ? orders.filter(o => !isWalkIn(o))
+    : orders
+
+  const selectedOrders = visibleOrders.filter(o => selectedIds.has(o.id))
+  const allVisibleSelected = visibleOrders.length > 0 && selectedOrders.length === visibleOrders.length
 
   return (
     <AdminLayout title="Orders">
@@ -723,7 +797,33 @@ export default function OrdersPage() {
           )}
         </div>
 
-        {/* Row 2: status filter pills */}
+        {/* Row 2: order source tabs */}
+        <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mr-1">Source</span>
+          <button
+            onClick={() => changeFilter('source', '')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+              !source ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+            }`}>
+            All Orders
+          </button>
+          <button
+            onClick={() => changeFilter('source', 'online')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+              source === 'online' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+            }`}>
+            <Globe size={11}/> Online
+          </button>
+          <button
+            onClick={() => changeFilter('source', 'walkin')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+              source === 'walkin' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+            }`}>
+            <Store size={11}/> Walk-in / Offline
+          </button>
+        </div>
+
+        {/* Row 3: status filter pills */}
         <div className="flex flex-wrap gap-2">
           <button onClick={() => changeFilter('status', '')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${!status ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
@@ -743,13 +843,13 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {orders.length > 0 && (
+      {visibleOrders.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 mb-5 flex flex-wrap items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <input
               type="checkbox"
               checked={allVisibleSelected}
-              onChange={e => setSelectedIds(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())}
+              onChange={e => setSelectedIds(e.target.checked ? new Set(visibleOrders.map(o => o.id)) : new Set())}
               className="w-4 h-4 accent-[#1B4332]"
             />
             {selectedOrders.length ? `${selectedOrders.length} selected` : 'Select visible orders'}
@@ -777,7 +877,7 @@ export default function OrdersPage() {
           <div className="w-8 h-8 border-3 border-[#1B4332] border-t-transparent rounded-full animate-spin"/>
           <p className="text-sm text-gray-400">Loading orders…</p>
         </div>
-      ) : orders.length === 0 ? (
+      ) : visibleOrders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-gray-400 gap-3">
           <Package size={40} className="opacity-30"/>
           <p className="text-sm font-medium">No orders found</p>
@@ -821,7 +921,7 @@ export default function OrdersPage() {
       )}
 
       {/* ── Pagination ── */}
-      {!loading && orders.length > 0 && (
+      {!loading && visibleOrders.length > 0 && (
         <div className="flex items-center justify-between mt-6 py-3 border-t border-gray-100">
           <p className="text-xs text-gray-400">
             Showing {((page-1)*15)+1}–{Math.min(page*15, total)} of <span className="font-semibold text-gray-600">{total}</span> orders
