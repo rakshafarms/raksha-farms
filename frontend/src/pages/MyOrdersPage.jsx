@@ -49,6 +49,13 @@ export default function MyOrdersPage() {
   const [sessionExpired, setSessionExpired] = useState(false)
   const didSync = useRef(false)
 
+  // Auto-hide skeleton after 8 s so user isn't stuck staring at it while
+  // the backend cold-starts. Token polling continues silently in background.
+  useEffect(() => {
+    const t = setTimeout(() => setSyncing(false), 8000)
+    return () => clearTimeout(t)
+  }, [])
+
   const allOrders = getOrdersByUser(user?.email)
 
   // Listen for session-expired or auth-failed events
@@ -71,18 +78,23 @@ export default function MyOrdersPage() {
         try { await syncOrdersByUser() } catch { /* silent */ }
         const phone = user?.phone
         if (phone) { try { await syncOrdersByPhone(phone) } catch { /* silent */ } }
-      } else if (user) {
-        // No token yet — Google auth may still be fetching it in background (up to ~10s)
-        let waited = 0
-        while (waited < 12000) {
+      }
+      // No token yet but user object exists — Google auth background retry is
+      // still in progress (Render cold-start can take 20–40s). Poll quietly
+      // until the token arrives; never time out to a fake "session expired".
+      // The sessionExpired state is ONLY set by the explicit rf:session-expired
+      // or rf:auth-failed events (real 401 or all retries exhausted).
+      else if (user) {
+        const started = Date.now()
+        while (Date.now() - started < 50000) {          // wait up to 50 s
           await new Promise(r => setTimeout(r, 2000))
-          waited += 2000
-          if (localStorage.getItem('auth_token')) {
+          const t = localStorage.getItem('auth_token')
+          if (t) {
             try { await syncOrdersByUser() } catch { /* silent */ }
             break
           }
         }
-        if (!localStorage.getItem('auth_token')) setSessionExpired(true)
+        // Do NOT call setSessionExpired here — the event listeners handle that.
       }
 
       if (isMount) setSyncing(false)
