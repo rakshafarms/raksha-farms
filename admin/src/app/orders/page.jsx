@@ -75,9 +75,9 @@ function StatusPill({ status, isPartial }) {
 }
 
 // ── Order-type helpers ────────────────────────────────────────────────────────
-const isWalkIn = (o) => typeof o.reference_id === 'string' && o.reference_id.startsWith('WI-')
+function isWalkIn(o) { return typeof o.reference_id === 'string' && o.reference_id.startsWith('WI-') }
 
-function OrderTypeBadge({ order }) {
+const OrderTypeBadge = ({ order }) => {
   if (isWalkIn(order))
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200 flex-shrink-0">
@@ -655,18 +655,9 @@ export default function OrdersPage() {
     win.print()
   }
 
-  // Group orders by IST date
-  const grouped = []
-  const seen = {}
-  for (const o of visibleOrders) {
-    const label = dateGroupLabel(o.created_at)
-    if (!seen[label]) { seen[label] = true; grouped.push({ label, orders:[] }) }
-    grouped[grouped.length-1].orders.push(o)
-  }
-
   const activeFilters = [status, source, search, fromDate, toDate].filter(Boolean).length
 
-  // Client-side source filter (online vs walk-in)
+  // Client-side source filter (online vs walk-in) — must be declared before grouped loop
   const visibleOrders = source === 'walkin'
     ? orders.filter(o => isWalkIn(o))
     : source === 'online'
@@ -675,6 +666,15 @@ export default function OrdersPage() {
 
   const selectedOrders = visibleOrders.filter(o => selectedIds.has(o.id))
   const allVisibleSelected = visibleOrders.length > 0 && selectedOrders.length === visibleOrders.length
+
+  // Group orders by IST date
+  const grouped = []
+  const seen = {}
+  for (const o of visibleOrders) {
+    const label = dateGroupLabel(o.created_at)
+    if (!seen[label]) { seen[label] = true; grouped.push({ label, orders:[] }) }
+    grouped[grouped.length-1].orders.push(o)
+  }
 
   return (
     <AdminLayout title="Orders">
