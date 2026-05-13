@@ -52,6 +52,7 @@ export const ordersAPI = {
   getOne: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, status, extras = {}) => api.patch(`/orders/${id}/status`, { status, ...extras }),
   getStats: () => api.get('/orders/stats'),
+  createWalkIn: (data) => api.post('/orders/walkin', data),
   // EventSource can't send Authorization headers, so we pass the token as a
   // query param. The backend adminSecret middleware accepts it as a fallback.
   eventsUrl: (token) => {

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { getOrders, getOrder, createOrder, updateOrderStatus, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
+import { getOrders, getOrder, createOrder, createWalkInOrder, updateOrderStatus, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
 import { adminSecret, verifyToken } from '../middleware/auth.js'
 
 // Optional auth middleware — attaches user if token valid, silently ignores bad/expired tokens
@@ -19,6 +19,7 @@ function optionalAuth(req, res, next) {
 }
 
 const r = Router()
+r.post('/walkin', adminSecret, createWalkInOrder)  // POS / offline billing
 r.post('/', optionalAuth, createOrder)
 r.get('/mine', verifyToken, getMyOrders)   // Logged-in user's own orders
 r.get('/events', adminSecret, (req, res) => {

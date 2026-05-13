@@ -309,6 +309,122 @@ export async function createOrder(req, res) {
   }
 }
 
+// ── Walk-in / POS order (admin only) ─────────────────────────────────────────
+// Creates an order for an offline/in-store customer.
+// - No delivery fee  (walk-in, product handed over immediately)
+// - Status = 'delivered' by default (already fulfilled at counter)
+// - Admin can override price per item (negotiated/bulk pricing)
+// - Inventory deducted atomically, same as online orders
+export async function createWalkInOrder(req, res) {
+  const client = await pool.connect()
+  try {
+    const { customerName, customerPhone, items, paymentMethod, discount = 0, notes = '' } = req.body
+    if (!customerName?.trim()) return res.status(400).json({ error: 'Customer name is required' })
+    if (!items?.length)        return res.status(400).json({ error: 'At least one item is required' })
+
+    await client.query('BEGIN')
+
+    let subtotal = 0
+    const validatedItems = []
+
+    for (const item of items) {
+      if (!item.id) continue
+      const qty = Math.floor(Number(item.quantity))
+      if (!qty || qty < 1) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Invalid quantity for "${item.name}"` })
+      }
+
+      const { rows: pRows } = await client.query(
+        'SELECT id, name, price, offer_price, stock, unit, is_active FROM products WHERE id=$1 FOR UPDATE',
+        [item.id]
+      )
+      const prod = pRows[0]
+      if (!prod || !prod.is_active) continue
+
+      // Admin can override price (walk-in discount / negotiated price)
+      const adminPrice = item.price && Number(item.price) > 0 ? Number(item.price) : null
+      const catalogPrice = prod.offer_price && Number(prod.offer_price) > 0
+        ? Number(prod.offer_price) : Number(prod.price)
+      const finalPrice = adminPrice ?? catalogPrice
+
+      const { rowCount } = await client.query(
+        `UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2 AND stock >= $1`,
+        [qty, item.id]
+      )
+      if (rowCount === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Insufficient stock for "${prod.name}" (available: ${prod.stock})` })
+      }
+
+      await client.query(
+        `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'walkin_sale')`,
+        [item.id, -qty]
+      ).catch(() => {})
+
+      subtotal += finalPrice * qty
+      validatedItems.push({ id: item.id, name: prod.name, quantity: qty, price: finalPrice, unit: prod.unit })
+    }
+
+    if (validatedItems.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'No valid items found' })
+    }
+
+    const discountAmount = Math.min(Math.max(0, Number(discount)), subtotal)
+    const total = Math.max(0, subtotal - discountAmount)
+
+    // Generate reference ID for walk-in
+    const now = new Date(Date.now() + 5.5 * 3600 * 1000)
+    const dd  = String(now.getUTCDate()).padStart(2,'0')
+    const mm  = String(now.getUTCMonth()+1).padStart(2,'0')
+    const yy  = String(now.getUTCFullYear()).slice(-2)
+    const hh  = String(now.getUTCHours()).padStart(2,'0')
+    const mi  = String(now.getUTCMinutes()).padStart(2,'0')
+    const ss  = String(now.getUTCSeconds()).padStart(2,'0')
+    const rnd = Math.floor(Math.random() * 9000 + 1000)
+    const referenceId = `WI-${dd}${mm}${yy}-${hh}${mi}${ss}-${rnd}`
+
+    // Try to link to an existing registered user by phone
+    let userId = null
+    if (customerPhone) {
+      const digits = customerPhone.replace(/\D/g,'').slice(-10)
+      const { rows: u } = await client.query(
+        `SELECT id FROM users WHERE RIGHT(REGEXP_REPLACE(phone,'\\D','','g'),10)=$1 LIMIT 1`,
+        [digits]
+      ).catch(() => ({ rows: [] }))
+      if (u[0]) userId = u[0].id
+    }
+
+    const address = { name: customerName.trim(), phone: customerPhone || '', type: 'walk_in' }
+
+    const { rows: [order] } = await client.query(
+      `INSERT INTO orders
+         (user_id, items, subtotal, delivery_fee, total, status, payment_method, address, notes, reference_id)
+       VALUES ($1, $2, $3, 0, $4, 'delivered', $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        userId,
+        JSON.stringify(validatedItems),
+        subtotal,
+        total,
+        paymentMethod || 'cash',
+        JSON.stringify(address),
+        notes,
+        referenceId,
+      ]
+    )
+
+    await client.query('COMMIT')
+    res.status(201).json({ ...order, discount: discountAmount })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    res.status(500).json({ error: err.message })
+  } finally {
+    client.release()
+  }
+}
+
 export async function getOrders(req, res) {
   try {
     const { status, page = 1, limit = 20, search, from_date, to_date } = req.query

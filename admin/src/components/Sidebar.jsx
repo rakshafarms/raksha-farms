@@ -5,11 +5,12 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Warehouse,
   Users, Tag, RefreshCw, BarChart2, Settings, LogOut, Leaf, Grid3X3, X,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Receipt
 } from 'lucide-react'
 
 const nav = [
   { label:'Dashboard',     href:'/',                      icon: LayoutDashboard },
+  { label:'Billing / POS', href:'/billing',               icon: Receipt },
   { label:'Orders',        href:'/orders',                icon: ShoppingCart },
   { label:'Products',      href:'/products',              icon: Package },
   { label:'Categories',    href:'/categories',            icon: Grid3X3 },
