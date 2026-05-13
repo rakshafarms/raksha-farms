@@ -42,6 +42,8 @@ app.use(cors({
     if (!origin || allowed.includes(origin)) return callback(null, true)
     // Allow any Netlify, Vercel, or Render subdomain
     if (/\.(netlify\.app|vercel\.app|onrender\.com)$/.test(origin)) return callback(null, true)
+    // Allow custom production domains
+    if (/^https?:\/\/(www\.)?rakshafarms\.com$/.test(origin)) return callback(null, true)
     return callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
