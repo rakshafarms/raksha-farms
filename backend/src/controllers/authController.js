@@ -2,18 +2,21 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
 
-// Link any guest orders (user_id IS NULL) that have the same email as this user.
+// Link any guest orders (user_id IS NULL) that match this user by email or phone.
 // Called after login, register, and Google auth so the Customers section in
 // admin immediately shows the correct order count / history for that user.
-async function linkGuestOrders(userId, email) {
-  if (!userId || !email) return
+async function linkGuestOrders(userId, email, phone) {
+  if (!userId) return
+  const digits = (phone || '').replace(/\D/g, '').slice(-10)
   await query(
     `UPDATE orders
      SET user_id = $1, updated_at = NOW()
      WHERE user_id IS NULL
-       AND LOWER(address->>'email') = LOWER($2)
-       AND address->>'email' != ''`,
-    [userId, email]
+       AND (
+         ($2 != '' AND LOWER(address->>'email') = LOWER($2) AND address->>'email' != '')
+         OR ($3 != '' AND RIGHT(REGEXP_REPLACE(address->>'phone','\\D','','g'),10) = $3)
+       )`,
+    [userId, email || '', digits]
   ).catch(() => {})
 }
 
@@ -39,8 +42,8 @@ export async function register(req, res) {
       `INSERT INTO users (name, email, phone, password, role) VALUES ($1, $2, $3, $4, 'user') RETURNING *`,
       [name.trim(), email.toLowerCase(), phone?.trim() || null, hashed]
     )
-    // Link any past guest orders with this email
-    await linkGuestOrders(rows[0].id, rows[0].email)
+    // Link any past guest orders with this email or phone
+    await linkGuestOrders(rows[0].id, rows[0].email, rows[0].phone)
 
     const token = signToken(rows[0])
     res.status(201).json({ token, user: { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone, role: rows[0].role } })
@@ -71,8 +74,8 @@ export async function login(req, res) {
     if (user.role !== 'admin' && user.role !== 'user') return res.status(403).json({ error: 'Access denied' })
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
 
-    // Link any past guest orders with this email
-    await linkGuestOrders(user.id, user.email)
+    // Link any past guest orders with this email or phone
+    await linkGuestOrders(user.id, user.email, user.phone)
 
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
@@ -152,8 +155,8 @@ export async function googleAuth(req, res) {
 
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
 
-    // Link any past guest orders that share this email → they become this user's orders immediately
-    await linkGuestOrders(user.id, user.email)
+    // Link any past guest orders that share this email or phone → they become this user's orders immediately
+    await linkGuestOrders(user.id, user.email, user.phone)
 
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })

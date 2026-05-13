@@ -537,22 +537,32 @@ export async function updateOrderStatus(req, res) {
 // Authenticated: return all orders for the logged-in user
 export async function getMyOrders(req, res) {
   try {
+    // Get user's phone so we can also link/find orders placed by phone
+    const { rows: uRows } = await query(
+      'SELECT phone FROM users WHERE id=$1',
+      [req.user.id]
+    ).catch(() => ({ rows: [] }))
+    const userPhone = (uRows[0]?.phone || '').replace(/\D/g, '').slice(-10)
+
+    // Link any guest orders that match by email OR phone → becomes this user's orders
     await query(
-      `UPDATE orders SET user_id=$1
+      `UPDATE orders SET user_id=$1, updated_at=NOW()
        WHERE user_id IS NULL
-         AND (address->>'email' ILIKE $2 OR notes ILIKE $3)
-         AND address->>'email' != ''`,
-      [req.user.id, req.user.email, `%${req.user.email}%`]
+         AND (
+           (address->>'email' != '' AND LOWER(address->>'email') = LOWER($2))
+           OR ($3 != '' AND RIGHT(REGEXP_REPLACE(address->>'phone','\\D','','g'),10) = $3)
+         )`,
+      [req.user.id, req.user.email || '', userPhone]
     ).catch(() => {})
 
+    // Fetch all orders for this user (now includes newly linked ones)
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
               items, address, notes, created_at, updated_at
        FROM orders
        WHERE user_id=$1
-          OR (user_id IS NULL AND address->>'email' ILIKE $2 AND address->>'email' != '')
        ORDER BY created_at DESC LIMIT 100`,
-      [req.user.id, req.user.email]
+      [req.user.id]
     )
     res.json(rows)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -562,11 +572,9 @@ export async function getOrdersByPhone(req, res) {
   try {
     const phone = req.params.phone.replace(/\D/g, '').slice(-10)
     if (phone.length !== 10) return res.status(400).json({ error: 'Invalid phone' })
-    // Public endpoint — return only status/total summary, no PII or purchase details.
-    // items column is excluded so a phone-number guess can't reveal what someone bought.
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
-              created_at, updated_at
+              items, address, notes, created_at, updated_at
        FROM orders
        WHERE address->>'phone' LIKE $1
          AND created_at > NOW() - INTERVAL '90 days'

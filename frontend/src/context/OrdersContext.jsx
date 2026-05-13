@@ -85,12 +85,20 @@ export function OrdersProvider({ children }) {
           && newNotes === order.notes
         if (noChange) return order
         changed = true
+        // Also refresh items from backend — needed when the local copy came from
+        // the phone-sync endpoint (which omitted items for privacy), or when the
+        // order was restored on a new device and items were never cached locally.
+        const backendItems = Array.isArray(match.items)
+          ? match.items
+          : (() => { try { return JSON.parse(match.items || '[]') } catch { return [] } })()
+        const mergedItems = backendItems.length > 0 ? backendItems : order.items
         return {
           ...order,
           status:    newStatus,
           backendId: match.id,
           total:     newTotal,
           notes:     newNotes,
+          items:     mergedItems,
           updatedAt: new Date().toISOString(),
         }
       })
