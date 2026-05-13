@@ -249,7 +249,7 @@ export default function BillingPage() {
         </div>
       )}
 
-      <div className="flex gap-4 h-[calc(100vh-130px)]">
+      <div className="flex gap-4 h-[calc(100vh-130px)] overflow-hidden">
 
         {/* ══ LEFT: Product Catalog ════════════════════════════════════════════ */}
         <div className="flex-1 min-w-0 flex flex-col gap-3 overflow-hidden">
@@ -353,8 +353,9 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* ══ RIGHT: Bill Panel — scrollable column ═══════════════════════════ */}
-        <div className="w-[440px] flex-shrink-0 overflow-y-auto flex flex-col gap-3 pb-3 pr-0.5">
+        {/* ══ RIGHT: Bill Panel — vertically scrollable ═══════════════════════ */}
+        <div className="w-[440px] flex-shrink-0 h-full overflow-y-auto flex flex-col gap-3 pb-3 pr-1"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#1B4332 transparent' }}>
 
           {/* ── Customer ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 flex-shrink-0">
