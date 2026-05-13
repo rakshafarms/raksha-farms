@@ -293,55 +293,54 @@ export default function BillingPage() {
                 <p className="text-sm">No products found</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3 pr-1">
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-4 2xl:grid-cols-5 gap-2 pr-1">
                 {filtered.map(p => {
-                  const price     = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
-                  const hasOffer  = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
-                  const stock     = Number(p.stock)
+                  const price      = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
+                  const hasOffer   = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
+                  const stock      = Number(p.stock)
                   const outOfStock = stock <= 0
-                  const inCart    = cart.find(i => i.id === p.id)
+                  const inCart     = cart.find(i => i.id === p.id)
                   return (
                     <div key={p.id}
                       onClick={() => !outOfStock && addToCart(p)}
-                      className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all duration-150 select-none
+                      className={`relative bg-white rounded-xl border-2 overflow-hidden transition-all duration-150 select-none
                         ${outOfStock ? 'opacity-50 cursor-not-allowed border-gray-100' :
-                          inCart ? 'border-[#1B4332] shadow-lg cursor-pointer ring-1 ring-[#1B4332]/20' :
-                          'border-gray-100 hover:border-[#1B4332] hover:shadow-md cursor-pointer'}`}
+                          inCart ? 'border-[#1B4332] shadow-md cursor-pointer ring-1 ring-[#1B4332]/20' :
+                          'border-gray-100 hover:border-[#1B4332] hover:shadow-sm cursor-pointer'}`}
                     >
                       {/* Cart badge */}
                       {inCart && (
-                        <div className="absolute top-2 right-2 z-10 w-6 h-6 bg-[#1B4332] rounded-full text-white text-xs font-black flex items-center justify-center shadow">
+                        <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 bg-[#1B4332] rounded-full text-white text-[10px] font-black flex items-center justify-center shadow">
                           {inCart.qty}
                         </div>
                       )}
 
-                      {/* Image */}
-                      <div className="aspect-square bg-gray-50 overflow-hidden">
+                      {/* Image — fixed height instead of aspect-square so it's compact */}
+                      <div className="h-24 bg-gray-50 overflow-hidden">
                         {imgSrc(p.image_url) ? (
                           <img src={imgSrc(p.image_url)} alt={p.name}
                             className="w-full h-full object-cover"
-                            onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-3xl">🌿</div>' }}
+                            onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-2xl">🌿</div>' }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-3xl">🌿</div>
+                          <div className="w-full h-full flex items-center justify-center text-2xl">🌿</div>
                         )}
                       </div>
 
                       {/* Info */}
-                      <div className="p-2.5">
-                        <p className="text-xs font-bold text-gray-800 leading-tight line-clamp-2 mb-1">{p.name}</p>
-                        {p.unit && <p className="text-[10px] text-gray-400 mb-1.5">{p.unit}</p>}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-black text-[#1B4332]">{fmtRs(price)}</span>
-                            {hasOffer && <span className="text-[10px] text-gray-400 line-through ml-1">{fmtRs(p.price)}</span>}
+                      <div className="p-1.5">
+                        <p className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-1 mb-0.5">{p.name}</p>
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="min-w-0">
+                            <span className="text-xs font-black text-[#1B4332]">{fmtRs(price)}</span>
+                            {hasOffer && <span className="text-[9px] text-gray-400 line-through ml-0.5">{fmtRs(p.price)}</span>}
                           </div>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                            outOfStock  ? 'bg-red-100 text-red-600' :
-                            stock <= 5  ? 'bg-orange-100 text-orange-600' :
+                          <span className={`text-[9px] font-bold px-1 py-0.5 rounded-full flex-shrink-0 ${
+                            outOfStock ? 'bg-red-100 text-red-600' :
+                            stock <= 5 ? 'bg-orange-100 text-orange-600' :
                             'bg-green-100 text-green-700'
                           }`}>
-                            {outOfStock ? 'Out' : `${stock}`}
+                            {outOfStock ? 'Out' : stock}
                           </span>
                         </div>
                       </div>
