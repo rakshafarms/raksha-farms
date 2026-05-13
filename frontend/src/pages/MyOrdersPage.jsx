@@ -20,13 +20,13 @@ const fmtOrderId = (iso) => {
 }
 
 const STATUS_CONFIG = {
-  pending:          { label: 'Pending',         dot: 'bg-amber-400',   pill: 'bg-amber-50 text-amber-700',   border: 'border-amber-200' },
-  accepted:         { label: 'Accepted',         dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700',     border: 'border-blue-200'  },
-  preparing:        { label: 'Preparing',        dot: 'bg-indigo-400',  pill: 'bg-indigo-50 text-indigo-700', border: 'border-indigo-200'},
-  out_for_delivery: { label: 'On the way',       dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700', border: 'border-violet-200'},
-  delivered:        { label: 'Delivered',        dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200' },
-  cancelled:        { label: 'Cancelled by Customer', dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500',    border: 'border-gray-200'  },
-  rejected:         { label: 'Rejected by Admin',   dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',       border: 'border-red-200'   },
+  pending:          { label: 'Pending',              dot: 'bg-amber-400',   pill: 'bg-amber-50 text-amber-700',     border: 'border-amber-200'  },
+  accepted:         { label: 'Accepted',             dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700',       border: 'border-blue-200'   },
+  preparing:        { label: 'Preparing',            dot: 'bg-indigo-400',  pill: 'bg-indigo-50 text-indigo-700',   border: 'border-indigo-200' },
+  out_for_delivery: { label: 'On the way',           dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700',   border: 'border-violet-200' },
+  delivered:        { label: 'Delivered',            dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200'},
+  cancelled:        { label: 'Cancelled by Customer',dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500',      border: 'border-gray-200'   },
+  rejected:         { label: 'Rejected by Admin',    dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',         border: 'border-red-200'    },
 }
 
 const FILTER_TABS = [
@@ -44,14 +44,14 @@ export default function MyOrdersPage() {
   const { getOrdersByUser, syncOrdersByUser, syncOrdersByPhone } = useOrders()
   const navigate = useNavigate()
 
-  const [filter, setFilter]         = useState('all')
-  const [syncing, setSyncing]       = useState(true)
+  const [filter, setFilter]               = useState('all')
+  const [syncing, setSyncing]             = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)
   const didSync = useRef(false)
 
   const allOrders = getOrdersByUser(user?.email)
 
-  // Listen for session-expired (token 401) or auth-failed (all retries exhausted)
+  // Listen for session-expired or auth-failed events
   useEffect(() => {
     function onExpired() { setSessionExpired(true); setSyncing(false) }
     window.addEventListener('rf:session-expired', onExpired)
@@ -71,10 +71,8 @@ export default function MyOrdersPage() {
         try { await syncOrdersByUser() } catch { /* silent */ }
         const phone = user?.phone
         if (phone) { try { await syncOrdersByPhone(phone) } catch { /* silent */ } }
-      }
-      // No token — wait up to 12 s for background Google auth retry to set it,
-      // then give up and let the user sign in manually (no false "expired" banner).
-      else if (user) {
+      } else if (user) {
+        // No token yet — Google auth may still be fetching it in background (up to ~10s)
         let waited = 0
         while (waited < 12000) {
           await new Promise(r => setTimeout(r, 2000))
@@ -84,7 +82,6 @@ export default function MyOrdersPage() {
             break
           }
         }
-        // Still no token after 12 s → genuinely need re-login
         if (!localStorage.getItem('auth_token')) setSessionExpired(true)
       }
 
@@ -103,16 +100,55 @@ export default function MyOrdersPage() {
   async function handleRefresh() {
     setSyncing(true)
     setSessionExpired(false)
-    await syncOrdersByUser()
-    const phone = user?.phone
-    if (phone) await syncOrdersByPhone(phone)
+    try {
+      await syncOrdersByUser()
+      const phone = user?.phone
+      if (phone) await syncOrdersByPhone(phone)
+    } catch { /* silent */ }
     setSyncing(false)
   }
 
-  const filtered = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter)
-  const counts   = allOrders.reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {})
-  const delivered = counts.delivered || 0
-  const totalSpent = allOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total || 0), 0)
+  const filtered    = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter)
+  const counts      = allOrders.reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {})
+  const delivered   = counts.delivered || 0
+  const totalSpent  = allOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total || 0), 0)
+
+  // ── Full-page skeleton while initial load ─────────────────────────────
+  if (syncing && allOrders.length === 0) {
+    return (
+      <div className="page-enter max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{user?.name || 'Your order history'}</p>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm text-gray-400 px-3 py-2">
+            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Loading…
+          </div>
+        </div>
+        <div className="space-y-3 animate-pulse">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="card p-4 flex items-center gap-4">
+              <div className="w-2.5 h-2.5 rounded-full bg-gray-200 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-36" />
+                <div className="h-2.5 bg-gray-100 rounded w-24" />
+                <div className="flex gap-1.5 mt-1">
+                  <div className="h-5 bg-gray-100 rounded-full w-16" />
+                  <div className="h-5 bg-gray-100 rounded-full w-14" />
+                </div>
+              </div>
+              <div className="h-5 bg-gray-200 rounded w-14" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-enter max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
@@ -126,7 +162,8 @@ export default function MyOrdersPage() {
         <button onClick={handleRefresh} disabled={syncing}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 px-3 py-2 rounded-xl hover:bg-gray-100 transition border border-gray-200">
           <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           {syncing ? 'Syncing…' : 'Refresh'}
         </button>
@@ -149,22 +186,6 @@ export default function MyOrdersPage() {
         </div>
       )}
 
-      {/* Syncing skeleton */}
-      {syncing && allOrders.length === 0 && (
-        <div className="space-y-3 mb-6 animate-pulse">
-          {[1,2,3].map(i => (
-            <div key={i} className="card p-4 flex items-center gap-4">
-              <div className="w-2.5 h-2.5 rounded-full bg-gray-200 flex-shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 bg-gray-200 rounded w-32" />
-                <div className="h-2.5 bg-gray-100 rounded w-24" />
-              </div>
-              <div className="h-4 bg-gray-200 rounded w-14" />
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Stats row */}
       {allOrders.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -183,40 +204,39 @@ export default function MyOrdersPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto">
-        {FILTER_TABS.filter(f => f.id === 'all' || counts[f.id] > 0).map(({ id, label }) => {
-          const count = id === 'all' ? allOrders.length : counts[id] || 0
-          return (
-            <button key={id} onClick={() => setFilter(id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap flex items-center gap-1.5 flex-shrink-0 transition-all ${
-                filter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              {id !== 'all' && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_CONFIG[id]?.dot || 'bg-gray-400'}`} />}
-              {label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filter === id ? 'bg-gray-100 text-gray-600' : 'bg-gray-200 text-gray-400'}`}>{count}</span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Filter tabs — only show when there are orders */}
+      {allOrders.length > 0 && (
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto">
+          {FILTER_TABS.filter(f => f.id === 'all' || counts[f.id] > 0).map(({ id, label }) => {
+            const count = id === 'all' ? allOrders.length : counts[id] || 0
+            return (
+              <button key={id} onClick={() => setFilter(id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap flex items-center gap-1.5 flex-shrink-0 transition-all ${
+                  filter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {id !== 'all' && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_CONFIG[id]?.dot || 'bg-gray-400'}`} />}
+                {label}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${filter === id ? 'bg-gray-100 text-gray-600' : 'bg-gray-200 text-gray-400'}`}>{count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
-      {/* Orders list */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16">
+      {/* Orders list or empty state */}
+      {allOrders.length === 0 ? (
+        <div className="text-center py-20">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl mx-auto mb-4">📦</div>
-          <h3 className="text-base font-semibold text-gray-600 mb-1">
-            {allOrders.length === 0 ? (syncing ? 'Loading your orders…' : 'No orders yet') : 'No orders here'}
-          </h3>
-          <p className="text-sm text-gray-400 mb-6">
-            {allOrders.length === 0
-              ? (syncing ? 'Fetching your order history from server' : 'Start shopping to place your first order')
-              : 'Try a different filter'}
-          </p>
-          {allOrders.length === 0 && !syncing && (
-            <Link to="/" className="btn-primary inline-flex items-center gap-2 text-sm">
-              <span>🌿</span> Shop Now
-            </Link>
-          )}
+          <h3 className="text-base font-semibold text-gray-600 mb-1">No orders yet</h3>
+          <p className="text-sm text-gray-400 mb-6">Start shopping to place your first order</p>
+          <Link to="/" className="btn-primary inline-flex items-center gap-2 text-sm">
+            <span>🌿</span> Shop Now
+          </Link>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-sm text-gray-400">No orders match this filter</p>
+          <button onClick={() => setFilter('all')} className="mt-3 text-sm text-forest-600 underline">View all orders</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -254,11 +274,11 @@ function OrderCard({ order }) {
 
   const isItemRejected = item => rejInfo?.rejected_items?.some(r => r.id === item.id || r.name === item.name)
 
-  const deliveryFee        = Number(order.deliveryFee || 0)
-  const allItemsTotal      = (order.items || []).reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
-  const keptItemsTotal     = (order.items || []).filter(it => !isItemRejected(it)).reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
-  const displayTotal       = hasPartialRejection && keptItemsTotal > 0 ? keptItemsTotal + deliveryFee : order.total
-  const displayOrigTotal   = hasPartialRejection && allItemsTotal > 0 ? allItemsTotal + deliveryFee : (rejInfo?.original_total || order.total)
+  const deliveryFee      = Number(order.deliveryFee || 0)
+  const allItemsTotal    = (order.items || []).reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
+  const keptItemsTotal   = (order.items || []).filter(it => !isItemRejected(it)).reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0)
+  const displayTotal     = hasPartialRejection && keptItemsTotal > 0 ? keptItemsTotal + deliveryFee : order.total
+  const displayOrigTotal = hasPartialRejection && allItemsTotal > 0 ? allItemsTotal + deliveryFee : (rejInfo?.original_total || order.total)
 
   const isPartial = hasPartialRejection
 
@@ -267,7 +287,7 @@ function OrderCard({ order }) {
     : '—'
 
   return (
-    <div className={`card overflow-hidden`}>
+    <div className="card overflow-hidden">
       <button className="w-full text-left px-4 py-4" onClick={() => setExpanded(v => !v)}>
         <div className="flex items-center gap-3">
           {/* Status dot */}
