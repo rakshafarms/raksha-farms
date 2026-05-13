@@ -293,7 +293,7 @@ export default function BillingPage() {
                 <p className="text-sm">No products found</p>
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-2 pr-1">
+              <div className="grid grid-cols-3 gap-2 pr-1">
                 {filtered.map(p => {
                   const price      = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
                   const hasOffer   = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
