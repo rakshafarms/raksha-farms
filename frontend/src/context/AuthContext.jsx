@@ -220,6 +220,26 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ─── Session expired (token 401) ────────────────────────────────────
+  // When backend says token is invalid/expired, clear the session so the
+  // user sees the login page instead of a silently empty profile.
+  useEffect(() => {
+    function onTokenExpired() {
+      // Only act if we actually think we're logged in
+      if (!localStorage.getItem('auth_token')) return
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('rf_auth_user')
+      setUser(null)
+      window.dispatchEvent(new CustomEvent('rf:logout'))
+      // Small delay so contexts can clear before the page re-renders
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('rf:session-expired'))
+      }, 50)
+    }
+    window.addEventListener('rf:token-expired', onTokenExpired)
+    return () => window.removeEventListener('rf:token-expired', onTokenExpired)
+  }, []) // eslint-disable-line
+
   return (
     <AuthContext.Provider value={{
       user,

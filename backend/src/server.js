@@ -23,6 +23,7 @@ import categoriesRoutes        from './routes/categories.js'
 import addressesRoutes         from './routes/addresses.js'
 import wishlistRoutes          from './routes/wishlist.js'
 import settingsRoutes          from './routes/settings.js'
+import paymentsRoutes          from './routes/payments.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -75,12 +76,13 @@ app.use('/api/categories',         categoriesRoutes)
 app.use('/api/addresses',          addressesRoutes)
 app.use('/api/wishlist',           wishlistRoutes)
 app.use('/api/settings',          settingsRoutes)
+app.use('/api/payments',          paymentsRoutes)
 
 // Health check — includes build date so we can confirm Render deployed latest code
 app.get('/health', (req, res) => res.json({
   status:    'ok',
   env:       process.env.NODE_ENV,
-  version:   '2026-05-11-v26',   // bump this on every deploy to verify new code is live
+  version:   '2026-05-13-v27',   // bump this on every deploy to verify new code is live
   features:  ['orders', 'order-tracking', 'google-auth', 'cross-device-sync', 'partial-rejection', 'low-stock-alerts', 'subscriptions', 'stock-deduction', 'soft-delete', 'admin-product-filters', 'subscription-dashboard', 'delivery-calendar', 'generate-orders', 'stock-warnings', 'payment-tracking', 'safe-json-parse', 'archived-order-block', 'order-number', 'saved-addresses-api', 'cart-sync-on-login'],
   database:  process.env.DATABASE_URL ? 'configured' : 'not-configured',
 }))

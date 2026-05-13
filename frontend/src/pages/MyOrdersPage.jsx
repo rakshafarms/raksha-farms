@@ -46,16 +46,19 @@ export default function MyOrdersPage() {
 
   const [filter, setFilter]         = useState('all')
   const [syncing, setSyncing]       = useState(true)
-  const [phoneInput, setPhoneInput] = useState('')
-  const [phoneSyncing, setPhoneSyncing] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const didSync = useRef(false)
 
   const allOrders = getOrdersByUser(user?.email)
-  const hasToken  = !!localStorage.getItem('auth_token')
+  const isLoggedIn = !!user
+  const hasToken   = !!localStorage.getItem('auth_token')
 
+  // Listen for session-expired event (token 401)
   useEffect(() => {
-    if (user?.phone) setPhoneInput(user.phone)
-  }, [user?.phone])
+    function onExpired() { setSessionExpired(true) }
+    window.addEventListener('rf:session-expired', onExpired)
+    return () => window.removeEventListener('rf:session-expired', onExpired)
+  }, [])
 
   useEffect(() => {
     async function doSync(isMount = false) {
@@ -64,6 +67,7 @@ export default function MyOrdersPage() {
       if (token) {
         try { await syncOrdersByUser() } catch { /* silent */ }
       }
+      // Also auto-sync by phone if the profile has one (catches guest orders)
       const phone = user?.phone
       if (phone) {
         try { await syncOrdersByPhone(phone) } catch { /* silent */ }
@@ -80,16 +84,9 @@ export default function MyOrdersPage() {
     return () => clearInterval(interval)
   }, []) // eslint-disable-line
 
-  async function handlePhoneSync() {
-    const digits = phoneInput.replace(/\D/g, '')
-    if (digits.length < 10) return
-    setPhoneSyncing(true)
-    await syncOrdersByPhone(digits)
-    setPhoneSyncing(false)
-  }
-
   async function handleRefresh() {
     setSyncing(true)
+    setSessionExpired(false)
     await syncOrdersByUser()
     const phone = user?.phone
     if (phone) await syncOrdersByPhone(phone)
@@ -99,7 +96,6 @@ export default function MyOrdersPage() {
   const filtered = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter)
   const counts   = allOrders.reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {})
   const delivered = counts.delivered || 0
-  const inProgress = (counts.pending || 0) + (counts.accepted || 0) + (counts.preparing || 0) + (counts.out_for_delivery || 0)
   const totalSpent = allOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total || 0), 0)
 
   return (
@@ -120,6 +116,36 @@ export default function MyOrdersPage() {
         </button>
       </div>
 
+      {/* Session expired banner */}
+      {sessionExpired && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 flex items-center gap-3">
+          <span className="text-2xl flex-shrink-0">🔒</span>
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 text-sm">Session expired</p>
+            <p className="text-amber-600 text-xs mt-0.5">Please sign in again to view your orders</p>
+          </div>
+          <Link to="/login" className="flex-shrink-0 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors">
+            Sign In
+          </Link>
+        </div>
+      )}
+
+      {/* Syncing skeleton */}
+      {syncing && allOrders.length === 0 && (
+        <div className="space-y-3 mb-6 animate-pulse">
+          {[1,2,3].map(i => (
+            <div key={i} className="card p-4 flex items-center gap-4">
+              <div className="w-2.5 h-2.5 rounded-full bg-gray-200 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-32" />
+                <div className="h-2.5 bg-gray-100 rounded w-24" />
+              </div>
+              <div className="h-4 bg-gray-200 rounded w-14" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Stats row */}
       {allOrders.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -134,28 +160,6 @@ export default function MyOrdersPage() {
           <div className="card p-3 text-center">
             <p className="text-xl font-black text-forest-600">₹{totalSpent.toLocaleString('en-IN')}</p>
             <p className="text-xs text-gray-400 mt-0.5">Spent</p>
-          </div>
-        </div>
-      )}
-
-      {/* Phone lookup — show when 0 orders or no token */}
-      {(allOrders.length === 0 || !hasToken) && (
-        <div className="card p-5 mb-6">
-          <p className="font-semibold text-gray-800 mb-0.5">Find orders by phone</p>
-          <p className="text-sm text-gray-400 mb-4">Enter the number you used when placing orders</p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">+91</span>
-              <input type="tel" inputMode="numeric" placeholder="10-digit number"
-                value={phoneInput}
-                onChange={e => setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                className="input-field pl-12 w-full" />
-            </div>
-            <button onClick={handlePhoneSync}
-              disabled={phoneSyncing || phoneInput.replace(/\D/g,'').length < 10}
-              className="px-4 py-2.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors whitespace-nowrap">
-              {phoneSyncing ? '…' : 'Find Orders'}
-            </button>
           </div>
         </div>
       )}
@@ -182,12 +186,14 @@ export default function MyOrdersPage() {
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl mx-auto mb-4">📦</div>
           <h3 className="text-base font-semibold text-gray-600 mb-1">
-            {allOrders.length === 0 ? 'No orders found' : 'No orders here'}
+            {allOrders.length === 0 ? (syncing ? 'Loading your orders…' : 'No orders yet') : 'No orders here'}
           </h3>
           <p className="text-sm text-gray-400 mb-6">
-            {allOrders.length === 0 ? 'Enter your phone number above to find past orders' : 'Try a different filter'}
+            {allOrders.length === 0
+              ? (syncing ? 'Fetching your order history from server' : 'Start shopping to place your first order')
+              : 'Try a different filter'}
           </p>
-          {allOrders.length === 0 && (
+          {allOrders.length === 0 && !syncing && (
             <Link to="/" className="btn-primary inline-flex items-center gap-2 text-sm">
               <span>🌿</span> Shop Now
             </Link>
@@ -357,7 +363,7 @@ function OrderCard({ order }) {
             </div>
             <div className="flex justify-between text-gray-400 text-xs pt-0.5">
               <span>Payment</span>
-              <span>{order.paymentMethod === 'upi' ? '📱 UPI' : '💵 Cash on Delivery'}</span>
+              <span>{order.paymentMethod === 'razorpay' ? '💳 Online (Razorpay)' : order.paymentMethod === 'upi' ? '📱 UPI' : '💵 Cash on Delivery'}</span>
             </div>
           </div>
 

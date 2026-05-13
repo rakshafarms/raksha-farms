@@ -653,25 +653,47 @@ export async function updateOrderStatus(req, res) {
 // Authenticated: return all orders for the logged-in user
 export async function getMyOrders(req, res) {
   try {
-    // Get user's phone so we can also link/find orders placed by phone
+    // 1. Get phone from users table (set when a logged-in user places an order)
     const { rows: uRows } = await query(
       'SELECT phone FROM users WHERE id=$1',
       [req.user.id]
     ).catch(() => ({ rows: [] }))
-    const userPhone = (uRows[0]?.phone || '').replace(/\D/g, '').slice(-10)
+    let userPhone = (uRows[0]?.phone || '').replace(/\D/g, '').slice(-10)
 
-    // Link any guest orders that match by email OR phone → becomes this user's orders
+    // 2. If no phone in profile yet, look at guest orders matched by email to
+    //    discover the phone. Google users never provide a phone at sign-up,
+    //    but they DO enter one at checkout. This makes linking self-healing:
+    //    email-matched orders reveal the phone → phone then links more orders.
+    if (!userPhone && req.user.email) {
+      const { rows: pRows } = await query(
+        `SELECT DISTINCT REGEXP_REPLACE(address->>'phone','\\D','','g') AS ph
+         FROM orders
+         WHERE LOWER(address->>'email') = LOWER($1)
+           AND address->>'phone' IS NOT NULL
+           AND LENGTH(REGEXP_REPLACE(address->>'phone','\\D','','g')) >= 10
+         LIMIT 1`,
+        [req.user.email]
+      ).catch(() => ({ rows: [] }))
+      if (pRows[0]?.ph) {
+        userPhone = pRows[0].ph.slice(-10)
+        // Persist it so the next sync is even faster
+        query('UPDATE users SET phone=$1 WHERE id=$2 AND (phone IS NULL OR phone=\'\')',
+          [userPhone, req.user.id]).catch(() => {})
+      }
+    }
+
+    // 3. Link any remaining guest orders by email OR phone → assign to this user
     await query(
       `UPDATE orders SET user_id=$1, updated_at=NOW()
        WHERE user_id IS NULL
          AND (
-           (address->>'email' != '' AND LOWER(address->>'email') = LOWER($2))
+           ($2 != '' AND LOWER(address->>'email') = LOWER($2))
            OR ($3 != '' AND RIGHT(REGEXP_REPLACE(address->>'phone','\\D','','g'),10) = $3)
          )`,
       [req.user.id, req.user.email || '', userPhone]
     ).catch(() => {})
 
-    // Fetch all orders for this user (now includes newly linked ones)
+    // 4. Fetch all orders for this user (now includes newly linked ones)
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
               items, address, notes, created_at, updated_at

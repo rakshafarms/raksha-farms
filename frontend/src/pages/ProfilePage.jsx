@@ -67,8 +67,6 @@ export default function ProfilePage() {
   const { getOrdersByUser, syncOrdersByUser } = useOrders()
   const orders = getOrdersByUser(user?.email)
 
-  // Sync fresh order data (including items) from backend on mount
-  useEffect(() => { syncOrdersByUser() }, []) // eslint-disable-line
   const { wishlist } = useWishlist()
   const { addresses, addAddress, updateAddress, deleteAddress } = useAddresses()
   const { addToast } = useToast()
@@ -77,6 +75,21 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab]             = useState('orders')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [cancelConfirmId, setCancelConfirmId] = useState(null)
+  const [ordersLoading, setOrdersLoading]     = useState(true)
+  const [sessionExpired, setSessionExpired]   = useState(false)
+
+  // Sync on mount and listen for session-expired
+  useEffect(() => {
+    async function init() {
+      setOrdersLoading(true)
+      await syncOrdersByUser().catch(() => {})
+      setOrdersLoading(false)
+    }
+    init()
+    function onExpired() { setSessionExpired(true) }
+    window.addEventListener('rf:session-expired', onExpired)
+    return () => window.removeEventListener('rf:session-expired', onExpired)
+  }, []) // eslint-disable-line
 
   // Subscriptions
   const [mySubs, setMySubs]           = useState([])
@@ -211,10 +224,27 @@ export default function ProfilePage() {
         </button>
       </div>
 
+      {/* Session expired banner */}
+      {sessionExpired && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 flex items-center gap-3">
+          <span className="text-2xl flex-shrink-0">🔒</span>
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 text-sm">Session expired — please sign in again</p>
+            <p className="text-amber-600 text-xs mt-0.5">Your orders and addresses couldn't be loaded</p>
+          </div>
+          <button onClick={() => { logout(); navigate('/login') }}
+            className="flex-shrink-0 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors">
+            Sign In
+          </button>
+        </div>
+      )}
+
       {/* Stats — tap to jump to tab */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
         <button onClick={() => setActiveTab('orders')} className="card p-3 sm:p-4 text-center hover:shadow-soft transition-all w-full">
-          <p className="text-lg sm:text-xl font-black text-forest-500 truncate">{orders.length}</p>
+          {ordersLoading
+            ? <div className="h-6 w-8 bg-gray-200 rounded animate-pulse mx-auto mb-1" />
+            : <p className="text-lg sm:text-xl font-black text-forest-500 truncate">{orders.length}</p>}
           <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Orders</p>
         </button>
         <button onClick={() => setActiveTab('subscriptions')} className="card p-3 sm:p-4 text-center hover:shadow-soft transition-all w-full">
@@ -222,7 +252,9 @@ export default function ProfilePage() {
           <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Active Subs</p>
         </button>
         <div className="card p-3 sm:p-4 text-center">
-          <p className="text-lg sm:text-xl font-black text-earth-600 truncate">₹{totalSpent.toLocaleString('en-IN')}</p>
+          {ordersLoading
+            ? <div className="h-6 w-14 bg-gray-200 rounded animate-pulse mx-auto mb-1" />
+            : <p className="text-lg sm:text-xl font-black text-earth-600 truncate">₹{totalSpent.toLocaleString('en-IN')}</p>}
           <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Spent</p>
         </div>
       </div>
@@ -310,7 +342,20 @@ export default function ProfilePage() {
       {/* ── ORDERS ── */}
       {activeTab === 'orders' && (
         <div className="animate-slide-up space-y-2">
-          {orders.length === 0 ? (
+          {ordersLoading ? (
+            // Skeleton cards while syncing
+            <div className="space-y-2 animate-pulse">
+              {[1,2,3].map(i => (
+                <div key={i} className="card p-4 flex items-center gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-40" />
+                    <div className="h-2.5 bg-gray-100 rounded w-28" />
+                  </div>
+                  <div className="h-4 bg-gray-200 rounded w-14" />
+                </div>
+              ))}
+            </div>
+          ) : orders.length === 0 ? (
             <div className="text-center py-16 card">
               <p className="text-5xl mb-3">📦</p>
               <p className="font-semibold text-gray-600 mb-1">No orders yet</p>

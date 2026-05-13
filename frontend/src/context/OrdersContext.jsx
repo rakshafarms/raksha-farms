@@ -140,6 +140,11 @@ export function OrdersProvider({ children }) {
       const res = await fetch(`${BACKEND_URL}/api/orders/mine`, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      if (res.status === 401) {
+        // Token expired — tell the app so the UI can prompt re-login
+        window.dispatchEvent(new CustomEvent('rf:token-expired'))
+        return
+      }
       if (!res.ok) return
       applyBackendOrders(await res.json())
     } catch { /* silent */ }

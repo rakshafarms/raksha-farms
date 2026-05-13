@@ -20,6 +20,10 @@ export function AddressProvider({ children }) {
       const res = await fetch(`${BACKEND_URL}/api/addresses`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (res.status === 401) {
+        window.dispatchEvent(new CustomEvent('rf:token-expired'))
+        return
+      }
       if (!res.ok) return
       const data = await res.json()
       setAddresses(Array.isArray(data) ? data : [])

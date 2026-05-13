@@ -99,8 +99,8 @@ export default function CheckoutPage() {
   // Step 2: delivery slot
   const [selectedSlot, setSelectedSlot] = useState('morning')
 
-  // Step 3: payment — 'card' is disabled (coming soon), default to upi
-  const [paymentMethod, setPaymentMethod] = useState('upi')
+  // Step 3: payment — default to razorpay (cards, UPI, netbanking in one)
+  const [paymentMethod, setPaymentMethod] = useState('razorpay')
 
   // Coupon state
   const [couponCode, setCouponCode]             = useState('')
@@ -221,6 +221,89 @@ export default function CheckoutPage() {
 
   const customActiveDays = DAYS.filter(d => dayQty[d] > 0).length
 
+  // ── Shared: create the order in the DB and handle post-order actions ────────
+  // Called from both the normal (COD/UPI) path and after Razorpay verification.
+  async function placeOrderInDB({ paymentId = null } = {}) {
+    let orderId = ''
+    const customer = {
+      name:    form.name.trim(),
+      phone:   form.phone.trim(),
+      address: `${form.address.trim()}, ${form.city.trim()} — ${form.pincode.trim()}`,
+      notes:   form.notes.trim(),
+      email:   user?.email || form.email.trim() || '',
+    }
+    const items = cart.map((item) => ({
+      id: item.id, name: item.name, emoji: item.emoji,
+      price: item.price, quantity: item.quantity, unit: item.unit,
+    }))
+    const order = {
+      orderId, customer, items,
+      total: finalTotal, subtotal: totalPrice, deliveryFee: slotFee,
+      deliverySlot: activeSlot?.label, paymentMethod,
+      status: 'pending',
+      userEmail: user?.email || form.email.trim() || null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }
+
+    let backendId = null
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      const token = localStorage.getItem('auth_token')
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const backendRes = await fetch(`${BACKEND_URL}/api/orders`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          customer, items, subtotal: totalPrice, deliveryFee: slotFee,
+          total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label,
+          coupon_code: couponApplied?.code || null,
+          ...(paymentId ? { payment_id: paymentId, payment_status: 'paid' } : {}),
+        }),
+      })
+      if (backendRes.ok) {
+        const data = await backendRes.json()
+        backendId = data.id || null
+        if (data.reference_id) { orderId = data.reference_id; order.orderId = data.reference_id }
+        else if (data.id)      { orderId = String(data.id);   order.orderId = String(data.id) }
+        order.total       = data.total        != null ? Number(data.total)        : order.total
+        order.subtotal    = data.subtotal     != null ? Number(data.subtotal)     : order.subtotal
+        order.deliveryFee = data.delivery_fee != null ? Number(data.delivery_fee) : order.deliveryFee
+        if (Array.isArray(data.items) && data.items.length > 0) order.items = data.items
+      } else {
+        const errData = await backendRes.json().catch(() => ({}))
+        addToast(`❌ Order failed: ${errData.error || 'Server error'}. Please try again.`, 'error', 7000)
+        setPlacing(false)
+        return
+      }
+    } catch {
+      addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
+      setPlacing(false)
+      return
+    }
+
+    // Save address if not already stored
+    const normalize = (s) => (s || '').trim().toLowerCase()
+    const alreadySaved = addresses.some(a =>
+      normalize(a.address) === normalize(form.address) &&
+      normalize(a.city)    === normalize(form.city)    &&
+      normalize(a.pincode) === normalize(form.pincode) &&
+      normalize(a.name)    === normalize(form.name)
+    )
+    if (!alreadySaved) {
+      addAddress({
+        label: 'Home', name: form.name.trim(), phone: form.phone.trim(),
+        address: form.address.trim(), city: form.city.trim(), pincode: form.pincode.trim(),
+      }).catch(() => {})
+    }
+
+    addOrder({ ...order, backendId })
+    cart.forEach((item) => decreaseStock(item.id, item.quantity))
+    clearCart()
+    setPlacing(false)
+    addToast('Order placed successfully! 🎉', 'success', 5000)
+    navigate(orderId ? `/track/${orderId}` : '/my-orders')
+  }
+
   async function handlePlaceOrder() {
     if (orderType === 'subscription' && !user) {
       addToast('Please log in to place a subscription order', 'error', 5000)
@@ -272,114 +355,93 @@ export default function CheckoutPage() {
       return
     }
 
-    // Stock validation before placing
+    // Stock validation
     const outOfStock = cart.filter(item => item.stock === 0 || item.quantity > item.stock)
     if (outOfStock.length) {
       addToast(`❌ ${outOfStock.map(i => i.name).join(', ')} — insufficient stock`, 'error', 5000)
       return
     }
-    setPlacing(true)
-    // Reference ID is now generated by the backend; placeholder until response arrives.
-    let orderId = ''
-    const customer = {
-      name:    form.name.trim(),
-      phone:   form.phone.trim(),
-      address: `${form.address.trim()}, ${form.city.trim()} — ${form.pincode.trim()}`,
-      notes:   form.notes.trim(),
-      email:   user?.email || form.email.trim() || '',
-    }
-    const items = cart.map((item) => ({
-      id:       item.id,
-      name:     item.name,
-      emoji:    item.emoji,
-      price:    item.price,
-      quantity: item.quantity,
-      unit:     item.unit,
-    }))
-    const order = {
-      orderId,
-      customer,
-      items,
-      total:         finalTotal,
-      subtotal:      totalPrice,
-      deliveryFee:   slotFee,
-      deliverySlot:  activeSlot?.label,
-      paymentMethod,
-      status:       'pending',
-      userEmail:    user?.email || form.email.trim() || null,
-      createdAt:    new Date().toISOString(),
-      updatedAt:    new Date().toISOString(),
-    }
 
-    // Save to backend database (so admin can see it and status can be polled)
-    let backendId = null
-    try {
-      const headers = { 'Content-Type': 'application/json' }
-      const token = localStorage.getItem('auth_token')
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const backendRes = await fetch(`${BACKEND_URL}/api/orders`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ customer, items, subtotal: totalPrice, deliveryFee: slotFee, total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label, coupon_code: couponApplied?.code || null }),
-      })
-      if (backendRes.ok) {
-        const data = await backendRes.json()
-        backendId = data.id || null
-        // Server-generated reference id becomes the canonical order id for the UI.
-        if (data.reference_id) {
-          orderId = data.reference_id
-          order.orderId = data.reference_id
-        } else if (data.id) {
-          orderId = String(data.id)
-          order.orderId = String(data.id)
+    // ── Razorpay online payment flow ─────────────────────────────────────────
+    if (paymentMethod === 'razorpay') {
+      setPlacing(true)
+      try {
+        // 1. Create Razorpay order on backend
+        const createRes = await fetch(`${BACKEND_URL}/api/payments/create-order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: Math.round(finalTotal * 100) }),  // paise
+        })
+        if (!createRes.ok) {
+          const e = await createRes.json().catch(() => ({}))
+          throw new Error(e.error || 'Failed to initiate payment')
         }
-        // Override local order with server-confirmed values so tracking shows accurate totals
-        order.total       = data.total       != null ? Number(data.total)       : order.total
-        order.subtotal    = data.subtotal    != null ? Number(data.subtotal)    : order.subtotal
-        order.deliveryFee = data.delivery_fee != null ? Number(data.delivery_fee) : order.deliveryFee
-        // Use server-validated items (prices may have been corrected server-side)
-        if (Array.isArray(data.items) && data.items.length > 0) {
-          order.items = data.items
-        }
-      } else {
-        const errData = await backendRes.json().catch(() => ({}))
+        const { order_id, amount, currency, key } = await createRes.json()
+
+        // 2. Open Razorpay checkout modal
+        const rzp = new window.Razorpay({
+          key,
+          amount,
+          currency,
+          name:        'Raksha Farms',
+          description: 'Fresh Farm Produce',
+          order_id,
+          prefill: {
+            name:    form.name,
+            email:   user?.email || form.email || '',
+            contact: form.phone,
+          },
+          theme: { color: '#1B4332' },
+
+          // 3. On successful payment — verify then create DB order
+          handler: async (response) => {
+            try {
+              const verifyRes = await fetch(`${BACKEND_URL}/api/payments/verify`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id:   response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature:  response.razorpay_signature,
+                }),
+              })
+              if (!verifyRes.ok) {
+                addToast('❌ Payment verification failed. Please contact support.', 'error', 7000)
+                setPlacing(false)
+                return
+              }
+              // Place order in DB with payment_id attached
+              await placeOrderInDB({ paymentId: response.razorpay_payment_id })
+            } catch {
+              addToast('❌ Payment processing error. Please contact support.', 'error', 7000)
+              setPlacing(false)
+            }
+          },
+
+          modal: {
+            ondismiss: () => {
+              setPlacing(false)
+              addToast('Payment cancelled', 'info')
+            },
+          },
+        })
+
+        rzp.on('payment.failed', (r) => {
+          addToast(`❌ Payment failed: ${r.error.description}`, 'error', 7000)
+          setPlacing(false)
+        })
+
+        rzp.open()
+      } catch (err) {
+        addToast(`❌ ${err.message || 'Payment failed. Please try again.'}`, 'error', 7000)
         setPlacing(false)
-        addToast(`❌ Order failed: ${errData.error || 'Server error'}. Please try again.`, 'error', 7000)
-        return
       }
-    } catch {
-      setPlacing(false)
-      addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
       return
     }
 
-    // Save the used address only if it doesn't already exist (prevent duplicates)
-    const normalize = (s) => (s || '').trim().toLowerCase()
-    const alreadySaved = addresses.some(a =>
-      normalize(a.address) === normalize(form.address) &&
-      normalize(a.city)    === normalize(form.city)    &&
-      normalize(a.pincode) === normalize(form.pincode) &&
-      normalize(a.name)    === normalize(form.name)
-    )
-    if (!alreadySaved) {
-      addAddress({
-        label:   'Home',
-        name:    form.name.trim(),
-        phone:   form.phone.trim(),
-        address: form.address.trim(),
-        city:    form.city.trim(),
-        pincode: form.pincode.trim(),
-      }).catch(() => {})
-    }
-
-    addOrder({ ...order, backendId })
-    // Stock already deducted server-side in transaction; sync local context so UI reflects it
-    cart.forEach((item) => decreaseStock(item.id, item.quantity))
-    clearCart()
-    setPlacing(false)
-
-    addToast('Order placed successfully! 🎉', 'success', 5000)
-    navigate(orderId ? `/track/${orderId}` : '/my-orders')
+    // ── COD / Manual UPI path ────────────────────────────────────────────────
+    setPlacing(true)
+    await placeOrderInDB()
   }
 
   return (
@@ -763,13 +825,37 @@ export default function CheckoutPage() {
               </h2>
 
               <div className="space-y-3 mb-5">
-                <PaymentOption id="upi" selected={paymentMethod === 'upi'} onSelect={() => setPaymentMethod('upi')}
-                  icon={<UpiIcon />} title="UPI Payment" subtitle="PhonePe, GPay, Paytm, BHIM & more" recommended />
+                <PaymentOption id="razorpay" selected={paymentMethod === 'razorpay'} onSelect={() => setPaymentMethod('razorpay')}
+                  icon={<RazorpayIcon />} title="Pay Online" subtitle="Cards, UPI, Netbanking & Wallets via Razorpay" recommended />
                 <PaymentOption id="cod" selected={paymentMethod === 'cod'} onSelect={() => setPaymentMethod('cod')}
                   icon={<CodIcon />} title="Cash on Delivery" subtitle="Pay when your order arrives" />
-                <PaymentOption id="card" selected={paymentMethod === 'card'} onSelect={() => setPaymentMethod('card')}
-                  icon={<CardIcon />} title="Credit / Debit Card" subtitle="Coming soon — use UPI or COD for now" disabled />
+                <PaymentOption id="upi" selected={paymentMethod === 'upi'} onSelect={() => setPaymentMethod('upi')}
+                  icon={<UpiIcon />} title="UPI (Manual)" subtitle="Scan our QR code or pay directly to UPI ID" />
               </div>
+
+              {paymentMethod === 'razorpay' && (
+                <div className="bg-forest-50 rounded-2xl p-4 border border-forest-100 mb-4 animate-slide-up">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#072654] flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
+                        <path d="M19 4H5a3 3 0 00-3 3v10a3 3 0 003 3h14a3 3 0 003-3V7a3 3 0 00-3-3zM5 6h14a1 1 0 011 1v1H4V7a1 1 0 011-1zm14 12H5a1 1 0 01-1-1v-5h16v5a1 1 0 01-1 1z"/>
+                        <rect x="6" y="15" width="3" height="2" rx="1"/>
+                        <rect x="11" y="15" width="4" height="2" rx="1"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">Secure Payment via Razorpay</p>
+                      <p className="text-xs text-gray-500">Credit/Debit Card · UPI · Netbanking · Wallets</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-forest-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    256-bit SSL encrypted checkout. Your payment details are never stored.
+                  </p>
+                </div>
+              )}
 
               {paymentMethod === 'upi' && (
                 <div className="bg-forest-50 rounded-2xl p-5 text-center border border-forest-100 mb-4 animate-slide-up">
@@ -796,15 +882,6 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {paymentMethod === 'card' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 text-sm text-amber-700 flex gap-2 animate-slide-up">
-                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Card payments are coming soon. Please select UPI or Cash on Delivery to place your order.
-                </div>
-              )}
-
               {/* Order review */}
               <div className="bg-sage-50 rounded-xl p-4 mb-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Order Summary</p>
@@ -820,7 +897,9 @@ export default function CheckoutPage() {
                   <div className="flex justify-between text-gray-500">
                     <span>Payment</span>
                     <span className="font-medium text-gray-700 capitalize">
-                      {paymentMethod === 'cod' ? 'Cash on Delivery' : 'UPI'}
+                      {paymentMethod === 'cod' ? 'Cash on Delivery'
+                        : paymentMethod === 'razorpay' ? 'Online (Razorpay)'
+                        : 'UPI (Manual)'}
                     </span>
                   </div>
                 </div>
@@ -835,7 +914,7 @@ export default function CheckoutPage() {
                 </button>
                 <button
                   onClick={handlePlaceOrder}
-                  disabled={placing || paymentMethod === 'card'}
+                  disabled={placing}
                   className="btn-primary flex-1 flex items-center justify-center gap-2 bg-forest-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {placing ? (
@@ -844,7 +923,14 @@ export default function CheckoutPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Placing Order...
+                      {paymentMethod === 'razorpay' ? 'Opening Payment...' : 'Placing Order...'}
+                    </>
+                  ) : paymentMethod === 'razorpay' ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                      </svg>
+                      Pay ₹{finalTotal}
                     </>
                   ) : (
                     <>Place Order ₹{finalTotal}</>
@@ -1055,6 +1141,14 @@ function PaymentOption({ id, selected, onSelect, icon, title, subtitle, recommen
   )
 }
 
+function RazorpayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none">
+      <rect width="24" height="24" rx="4" fill="#072654" />
+      <path d="M19 6H5a1 1 0 00-1 1v1h16V7a1 1 0 00-1-1zM4 10v7a1 1 0 001 1h14a1 1 0 001-1v-7H4zm3 5h2a1 1 0 010 2H7a1 1 0 010-2zm4 0h4a1 1 0 010 2h-4a1 1 0 010-2z" fill="white"/>
+    </svg>
+  )
+}
 function UpiIcon() {
   return (
     <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none">
