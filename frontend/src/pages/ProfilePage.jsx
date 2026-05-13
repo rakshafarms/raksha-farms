@@ -64,8 +64,11 @@ function FreqPill({ freq }) {
 
 export default function ProfilePage() {
   const { user, logout, isLoggedIn } = useAuth()
-  const { getOrdersByUser } = useOrders()
+  const { getOrdersByUser, syncOrdersByUser } = useOrders()
   const orders = getOrdersByUser(user?.email)
+
+  // Sync fresh order data (including items) from backend on mount
+  useEffect(() => { syncOrdersByUser() }, []) // eslint-disable-line
   const { wishlist } = useWishlist()
   const { addresses, addAddress, updateAddress, deleteAddress } = useAddresses()
   const { addToast } = useToast()
