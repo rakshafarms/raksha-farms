@@ -25,6 +25,12 @@ export async function getCustomers(req, res) {
             SELECT 1 FROM users eu
             WHERE LOWER(eu.email) = LOWER(o.address->>'email')
           )
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM users pu
+          WHERE pu.phone IS NOT NULL AND pu.phone != ''
+            AND RIGHT(REGEXP_REPLACE(pu.phone,'\\D','','g'),10)
+                = RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10)
         )`
 
     if (search) {
@@ -54,9 +60,9 @@ export async function getCustomers(req, res) {
     const includeGuests = status !== 'blocked'
 
     // ── Registered users ─────────────────────────────────────────────────────
-    // Join on user_id OR matching email (catches edge-case orders placed while
-    // not fully logged in but with same email — linkGuestOrders handles most of
-    // these at login time, but this covers any that slip through).
+    // Join on user_id OR matching email OR matching phone (catches edge-case orders
+    // placed while not fully logged in — linkGuestOrders handles most of these at
+    // login time, but this covers any that slip through before the next login).
     const regSql = `
       SELECT
         u.id::text   AS id,
@@ -66,7 +72,10 @@ export async function getCustomers(req, res) {
           NULLIF(u.phone, ''),
           (SELECT o2.address->>'phone'
            FROM orders o2
-           WHERE (o2.user_id = u.id OR LOWER(o2.address->>'email') = LOWER(u.email))
+           WHERE (o2.user_id = u.id
+                  OR (o2.user_id IS NULL AND LOWER(o2.address->>'email') = LOWER(u.email) AND u.email != '' AND o2.address->>'email' != '')
+                  OR (o2.user_id IS NULL AND u.phone IS NOT NULL AND u.phone != ''
+                      AND RIGHT(REGEXP_REPLACE(o2.address->>'phone','\\D','','g'),10) = RIGHT(REGEXP_REPLACE(u.phone,'\\D','','g'),10)))
              AND (o2.address->>'phone') IS NOT NULL
              AND (o2.address->>'phone') != ''
            ORDER BY o2.created_at DESC
@@ -76,14 +85,16 @@ export async function getCustomers(req, res) {
         u.created_at,
         'registered' AS customer_type,
         COUNT(DISTINCT o.id)::int   AS total_orders,
-        COALESCE(SUM(DISTINCT CASE WHEN o.status NOT IN ('cancelled','rejected')
-                               THEN o.total ELSE 0 END), 0)::numeric AS total_spent,
+        COALESCE(SUM(CASE WHEN o.status NOT IN ('cancelled','rejected')
+                          THEN o.total ELSE 0 END), 0)::numeric AS total_spent,
         MAX(o.created_at)           AS last_order_at,
         COUNT(DISTINCT CASE WHEN o.status = 'delivered' THEN o.id END)::int AS delivered_orders
       FROM users u
       LEFT JOIN orders o
         ON o.user_id = u.id
         OR (o.user_id IS NULL AND LOWER(o.address->>'email') = LOWER(u.email) AND u.email != '' AND o.address->>'email' != '')
+        OR (o.user_id IS NULL AND u.phone IS NOT NULL AND u.phone != ''
+            AND RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10) = RIGHT(REGEXP_REPLACE(u.phone,'\\D','','g'),10))
       ${regWhere}
       GROUP BY u.id
     `

@@ -15,7 +15,7 @@ function useAdminToast() {
 }
 import {
   Search, UserCheck, UserX, X, ShoppingBag,
-  Phone, Mail, Calendar, TrendingUp, Users, Shield, Ban
+  Phone, Mail, Calendar, TrendingUp, Users, Shield, Ban, RefreshCw
 } from 'lucide-react'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -212,6 +212,13 @@ export default function CustomersPage() {
 
   useEffect(() => { load() }, [page, filter])
 
+  // Auto-refresh when tab becomes visible again (admin switches tabs and comes back)
+  useEffect(() => {
+    function onVisible() { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [load])
+
   function applySearch() { setPage(1); load({ page: 1 }) }
   function setF(f) { setFilter(f); setPage(1); load({ filter: f, page: 1 }) }
 
@@ -237,6 +244,10 @@ export default function CustomersPage() {
 
       {/* ── Filters ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 mb-5 flex flex-wrap items-center gap-3">
+        <button onClick={() => load()} disabled={loading} title="Refresh"
+          className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-40">
+          <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>
+        </button>
         <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 flex-1 min-w-52">
           <Search size={14} className="text-gray-400 flex-shrink-0"/>
           <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && applySearch()}
