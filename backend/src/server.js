@@ -38,13 +38,18 @@ app.use(cors({
       process.env.CLIENT_URL || 'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:4173',
+      // Always include production domains regardless of env vars
+      'https://www.rakshafarms.com',
+      'https://rakshafarms.com',
     ].filter(Boolean)
-    // Allow requests with no origin (mobile apps, curl, etc)
-    if (!origin || allowed.includes(origin)) return callback(null, true)
-    // Allow any Netlify, Vercel, or Render subdomain
+    // Allow requests with no origin (mobile apps, Postman, curl)
+    if (!origin) return callback(null, true)
+    // Exact match against the explicit list
+    if (allowed.includes(origin)) return callback(null, true)
+    // Allow any Netlify, Vercel, or Render subdomain (preview deployments)
     if (/\.(netlify\.app|vercel\.app|onrender\.com)$/.test(origin)) return callback(null, true)
-    // Allow custom production domains
-    if (/^https?:\/\/(www\.)?rakshafarms\.com$/.test(origin)) return callback(null, true)
+    // Allow any subdomain of rakshafarms.com
+    if (/^https?:\/\/([a-z0-9-]+\.)?rakshafarms\.com$/.test(origin)) return callback(null, true)
     return callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
