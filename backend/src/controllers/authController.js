@@ -2,6 +2,21 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
 
+// Link any guest orders (user_id IS NULL) that have the same email as this user.
+// Called after login, register, and Google auth so the Customers section in
+// admin immediately shows the correct order count / history for that user.
+async function linkGuestOrders(userId, email) {
+  if (!userId || !email) return
+  await query(
+    `UPDATE orders
+     SET user_id = $1, updated_at = NOW()
+     WHERE user_id IS NULL
+       AND LOWER(address->>'email') = LOWER($2)
+       AND address->>'email' != ''`,
+    [userId, email]
+  ).catch(() => {})
+}
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name },
@@ -24,6 +39,9 @@ export async function register(req, res) {
       `INSERT INTO users (name, email, phone, password, role) VALUES ($1, $2, $3, $4, 'user') RETURNING *`,
       [name.trim(), email.toLowerCase(), phone?.trim() || null, hashed]
     )
+    // Link any past guest orders with this email
+    await linkGuestOrders(rows[0].id, rows[0].email)
+
     const token = signToken(rows[0])
     res.status(201).json({ token, user: { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone, role: rows[0].role } })
   } catch (err) {
@@ -52,6 +70,9 @@ export async function login(req, res) {
 
     if (user.role !== 'admin' && user.role !== 'user') return res.status(403).json({ error: 'Access denied' })
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
+
+    // Link any past guest orders with this email
+    await linkGuestOrders(user.id, user.email)
 
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
@@ -107,7 +128,6 @@ export async function googleAuth(req, res) {
     if (!gRes.ok) return res.status(401).json({ error: 'Invalid Google credential' })
     const payload = await gRes.json()
     if (!payload.email) return res.status(401).json({ error: 'No email in Google token' })
-    // Verify the token was issued for this app (prevents tokens from other apps being used)
     const expectedAud = process.env.GOOGLE_CLIENT_ID
     if (!expectedAud) return res.status(500).json({ error: 'Server misconfiguration: GOOGLE_CLIENT_ID not set' })
     if (payload.aud !== expectedAud) return res.status(401).json({ error: 'Invalid Google credential' })
@@ -116,7 +136,6 @@ export async function googleAuth(req, res) {
     let { rows } = await query('SELECT * FROM users WHERE email = $1', [payload.email.toLowerCase()])
     let user = rows[0]
     if (!user) {
-      // New Google user — create account
       const hashed = await bcrypt.hash(`google_${payload.sub}`, 10)
       const { rows: created } = await query(
         `INSERT INTO users (name, email, password, role) VALUES ($1,$2,$3,'user') RETURNING *`,
@@ -124,7 +143,6 @@ export async function googleAuth(req, res) {
       )
       user = created[0]
     } else if (payload.name && payload.name !== user.name && !user.password?.startsWith('$2')) {
-      // Existing Google-only user whose name may have changed in their Google account — sync it
       const { rows: updated } = await query(
         `UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
         [payload.name, user.id]
@@ -133,6 +151,9 @@ export async function googleAuth(req, res) {
     }
 
     if (user.is_active === false) return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' })
+
+    // Link any past guest orders that share this email → they become this user's orders immediately
+    await linkGuestOrders(user.id, user.email)
 
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
