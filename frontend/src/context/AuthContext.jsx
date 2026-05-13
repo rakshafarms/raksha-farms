@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useOrders } from './OrdersContext'
 
-export const GOOGLE_CLIENT_ID = '626173903642-l61p32jrfj8b22qlaeotf157ptt1vvp3.apps.googleusercontent.com'
+export const GOOGLE_CLIENT_ID = '748062369153-cras387r0nfe12n4n8q8a5iu91g60jq1.apps.googleusercontent.com'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
