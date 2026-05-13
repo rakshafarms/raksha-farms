@@ -1,8 +1,22 @@
 import { query } from './database.js'
 
+// Retry the migration up to 3 times with a 5-second gap.
+// Render's PostgreSQL can be slow to accept connections right after a deploy.
+async function withRetry(fn, attempts = 3, delayMs = 5000) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (i === attempts) throw err
+      console.log(`Attempt ${i} failed (${err.message}). Retrying in ${delayMs / 1000}s…`)
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+}
+
 async function migrate() {
   console.log('Running migrations...')
-  try {
+  await withRetry(async () => {
     // Users
     await query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -114,11 +128,9 @@ async function migrate() {
     `)
 
     console.log('✅ Migrations complete. Admin: admin@rakshafarms.in / password')
-    process.exit(0)
-  } catch (err) {
-    console.error('Migration failed:', err)
-    process.exit(1)
-  }
+  })
 }
 
 migrate()
+  .then(() => process.exit(0))
+  .catch(err => { console.error('Migration failed after retries:', err); process.exit(1) })

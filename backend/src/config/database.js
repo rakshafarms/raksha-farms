@@ -13,7 +13,7 @@ const pool = new Pool(
         ssl: isProduction ? { rejectUnauthorized: false } : false,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 15000,   // 15s — enough for Render cold-start
       }
     : {
         host:     process.env.DB_HOST     || 'localhost',
@@ -23,7 +23,7 @@ const pool = new Pool(
         password: process.env.DB_PASSWORD || '',
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 15000,
       }
 )
 
