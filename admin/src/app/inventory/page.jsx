@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, categoriesAPI } from '../../lib/api'
-import { AlertTriangle, Package, Search } from 'lucide-react'
+import { AlertTriangle, Package, Search, Printer } from 'lucide-react'
 
 const FALLBACK_CATEGORIES = [
   { slug:'vegetables', name:'Vegetables' },{ slug:'fruits', name:'Fruits' },
@@ -57,6 +57,87 @@ export default function InventoryPage() {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
     return matchCat && matchSearch
   })
+
+  function printInventory() {
+    const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })
+    const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
+    const levelColor = { out: '#dc2626', critical: '#ea580c', low: '#ca8a04', good: '#16a34a' }
+    const rows = filtered.map(p => {
+      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+      return `<tr>
+        <td>${p.name}</td>
+        <td style="text-transform:capitalize">${p.category || '—'}</td>
+        <td style="text-align:right;font-weight:700">${p.stock}</td>
+        <td><span style="color:${levelColor[level]};font-weight:600">${levelLabel[level]}</span></td>
+      </tr>`
+    }).join('')
+
+    const statsHtml = [
+      { label: 'Out of Stock', value: outOfStock,  color: '#dc2626' },
+      { label: 'Critical (≤5)',value: critical,     color: '#ea580c' },
+      { label: 'Low (≤15)',    value: lowStockCnt,  color: '#ca8a04' },
+      { label: 'Good',          value: good,         color: '#16a34a' },
+    ].map(s => `<div class="stat-card">
+      <div class="stat-val" style="color:${s.color}">${s.value}</div>
+      <div class="stat-label">${s.label}</div>
+    </div>`).join('')
+
+    const filterNote = [
+      selectedCategory !== 'all' && `Category: ${categories.find(c=>c.slug===selectedCategory)?.name || selectedCategory}`,
+      search && `Search: "${search}"`,
+    ].filter(Boolean).join(' · ')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+    <title>Raksha Farms — Inventory Report</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Arial,sans-serif;font-size:13px;color:#111;padding:24px}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #1B4332}
+      .brand{font-size:20px;font-weight:800;color:#1B4332;letter-spacing:.5px}
+      .sub{font-size:11px;color:#666;margin-top:3px}
+      .meta{text-align:right;font-size:11px;color:#555;line-height:1.7}
+      .stats{display:flex;gap:12px;margin-bottom:20px}
+      .stat-card{flex:1;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px}
+      .stat-val{font-size:22px;font-weight:900}
+      .stat-label{font-size:10px;color:#555;margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+      ${lowStock.length > 0 ? `.alert{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400e;font-weight:600}` : ''}
+      table{width:100%;border-collapse:collapse}
+      thead tr{background:#1B4332;color:#fff}
+      th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+      th.right{text-align:right}
+      td{padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:12px}
+      tr:nth-child(even) td{background:#f9fafb}
+      .footer{margin-top:16px;text-align:center;font-size:10px;color:#999}
+      @media print{body{padding:12px}.header{margin-bottom:14px}}
+    </style></head><body>
+    <div class="header">
+      <div>
+        <div class="brand">🌿 Raksha Farms</div>
+        <div class="sub">Inventory Report${filterNote ? ' · ' + filterNote : ''}</div>
+      </div>
+      <div class="meta">
+        <div><strong>Printed:</strong> ${now}</div>
+        <div><strong>Products:</strong> ${filtered.length}</div>
+      </div>
+    </div>
+    <div class="stats">${statsHtml}</div>
+    ${lowStock.length > 0 ? `<div class="alert">⚠️ ${lowStock.length} product${lowStock.length>1?'s':''} low on stock: ${lowStock.map(p=>`${p.name} (${p.stock})`).join(', ')}</div>` : ''}
+    <table>
+      <thead><tr>
+        <th>Product</th><th>Category</th><th class="right">Stock</th><th>Level</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="footer">Raksha Farms Admin · rakshafarms.in · Generated ${now}</div>
+    </body></html>`
+
+    const win = window.open('', '_blank', 'width=820,height=700')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print() }, 400)
+  }
 
   // Stats
   const outOfStock  = products.filter(p => p.stock === 0).length
@@ -147,8 +228,15 @@ export default function InventoryPage() {
           <div className="flex items-center gap-2">
             <Package size={18} className="text-gray-600"/>
             <h2 className="font-semibold text-gray-800">Stock Levels</h2>
+            <span className="text-xs text-gray-400">{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
           </div>
-          <span className="text-xs text-gray-400">{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
+          <button
+            onClick={printInventory}
+            disabled={loading || filtered.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1B4332] hover:bg-[#163826] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
+          >
+            <Printer size={15}/> Print Report
+          </button>
         </div>
         <table className="w-full text-sm">
           <thead>
