@@ -126,6 +126,7 @@ export function AuthProvider({ children }) {
         const partialUser = { uid: payload.sub, name: payload.name, email: payload.email, avatar: payload.picture, provider: 'google' }
         setUser(partialUser)
         ;(async () => {
+          let gotToken = false
           for (let i = 0; i < 4; i++) {
             await new Promise(r => setTimeout(r, 10000 * (i + 1))) // 10s, 20s, 30s, 40s
             try {
@@ -139,10 +140,13 @@ export function AuthProvider({ children }) {
                 localStorage.setItem('auth_token', d2.token)
                 setUser({ ...d2.user, avatar: payload.picture, provider: 'google' })
                 setTimeout(() => syncAllOrders(), 300)
+                gotToken = true
                 break
               }
             } catch { /* keep trying */ }
           }
+          // All retries failed — backend is unreachable; let the UI know
+          if (!gotToken) window.dispatchEvent(new CustomEvent('rf:auth-failed'))
         })()
         window.dispatchEvent(new CustomEvent('rf:login'))
       },

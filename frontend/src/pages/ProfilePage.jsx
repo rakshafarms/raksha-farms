@@ -76,28 +76,42 @@ export default function ProfilePage() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [cancelConfirmId, setCancelConfirmId] = useState(null)
   const [ordersLoading, setOrdersLoading]     = useState(true)
-  // session expired = token missing or rejected by backend
-  const [sessionExpired, setSessionExpired]   = useState(
-    () => !!user && !localStorage.getItem('auth_token')  // detect immediately on render
-  )
+  const [sessionExpired, setSessionExpired]   = useState(false)
 
-  // Sync on mount and listen for session-expired
+  // Sync on mount and listen for session-expired / auth-failed events
   useEffect(() => {
-    // If there's no token at all, mark expired right away — no point calling API
-    if (!localStorage.getItem('auth_token')) {
-      setSessionExpired(true)
-      setOrdersLoading(false)
-      return
-    }
+    function onExpired() { setSessionExpired(true); setOrdersLoading(false) }
+    window.addEventListener('rf:session-expired', onExpired)
+    window.addEventListener('rf:auth-failed',     onExpired)
+
     async function init() {
       setOrdersLoading(true)
-      await syncOrdersByUser().catch(() => {})
+
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        await syncOrdersByUser().catch(() => {})
+      } else if (user) {
+        // No token yet — give background Google auth retry up to 12 s
+        let waited = 0
+        while (waited < 12000) {
+          await new Promise(r => setTimeout(r, 2000))
+          waited += 2000
+          if (localStorage.getItem('auth_token')) {
+            await syncOrdersByUser().catch(() => {})
+            break
+          }
+        }
+        if (!localStorage.getItem('auth_token')) setSessionExpired(true)
+      }
+
       setOrdersLoading(false)
     }
     init()
-    function onExpired() { setSessionExpired(true); setOrdersLoading(false) }
-    window.addEventListener('rf:session-expired', onExpired)
-    return () => window.removeEventListener('rf:session-expired', onExpired)
+
+    return () => {
+      window.removeEventListener('rf:session-expired', onExpired)
+      window.removeEventListener('rf:auth-failed',     onExpired)
+    }
   }, []) // eslint-disable-line
 
   // Subscriptions

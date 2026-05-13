@@ -46,34 +46,48 @@ export default function MyOrdersPage() {
 
   const [filter, setFilter]         = useState('all')
   const [syncing, setSyncing]       = useState(true)
-  const [sessionExpired, setSessionExpired] = useState(
-    () => !!user && !localStorage.getItem('auth_token')
-  )
+  const [sessionExpired, setSessionExpired] = useState(false)
   const didSync = useRef(false)
 
   const allOrders = getOrdersByUser(user?.email)
 
-  // Listen for session-expired event (token 401 from backend)
+  // Listen for session-expired (token 401) or auth-failed (all retries exhausted)
   useEffect(() => {
     function onExpired() { setSessionExpired(true); setSyncing(false) }
     window.addEventListener('rf:session-expired', onExpired)
-    return () => window.removeEventListener('rf:session-expired', onExpired)
+    window.addEventListener('rf:auth-failed',     onExpired)
+    return () => {
+      window.removeEventListener('rf:session-expired', onExpired)
+      window.removeEventListener('rf:auth-failed',     onExpired)
+    }
   }, [])
 
   useEffect(() => {
-    // No token → don't even try; show session expired immediately
-    if (!localStorage.getItem('auth_token')) {
-      setSyncing(false)
-      return
-    }
-
     async function doSync(isMount = false) {
       if (isMount) setSyncing(true)
-      try { await syncOrdersByUser() } catch { /* silent */ }
-      const phone = user?.phone
-      if (phone) {
-        try { await syncOrdersByPhone(phone) } catch { /* silent */ }
+
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        try { await syncOrdersByUser() } catch { /* silent */ }
+        const phone = user?.phone
+        if (phone) { try { await syncOrdersByPhone(phone) } catch { /* silent */ } }
       }
+      // No token — wait up to 12 s for background Google auth retry to set it,
+      // then give up and let the user sign in manually (no false "expired" banner).
+      else if (user) {
+        let waited = 0
+        while (waited < 12000) {
+          await new Promise(r => setTimeout(r, 2000))
+          waited += 2000
+          if (localStorage.getItem('auth_token')) {
+            try { await syncOrdersByUser() } catch { /* silent */ }
+            break
+          }
+        }
+        // Still no token after 12 s → genuinely need re-login
+        if (!localStorage.getItem('auth_token')) setSessionExpired(true)
+      }
+
       if (isMount) setSyncing(false)
     }
 
