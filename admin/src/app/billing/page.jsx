@@ -1,224 +1,235 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, ordersAPI } from '../../lib/api'
 import {
   Search, Plus, Minus, Trash2, Printer, ShoppingBag,
-  User, Phone, IndianRupee, Tag, CheckCircle2, X, ChevronDown
+  User, Phone, IndianRupee, Tag, CheckCircle2, X,
+  StickyNote, Zap
 } from 'lucide-react'
 
-const PAY_METHODS = [
-  { value: 'cash',  label: '💵 Cash' },
-  { value: 'upi',   label: '📱 UPI' },
-  { value: 'card',  label: '💳 Card' },
-  { value: 'credit',label: '📒 Credit' },
+const PAY = [
+  { value: 'cash',   label: 'Cash',   emoji: '💵' },
+  { value: 'upi',    label: 'UPI',    emoji: '📱' },
+  { value: 'card',   label: 'Card',   emoji: '💳' },
+  { value: 'credit', label: 'Credit', emoji: '📒' },
 ]
 
-const fmt = (n) => Number(n || 0).toLocaleString('en-IN')
+const fmt   = (n) => Number(n || 0).toLocaleString('en-IN')
 const fmtRs = (n) => `₹${fmt(n)}`
 
 export default function BillingPage() {
-  // Products catalog
-  const [products, setProducts] = useState([])
-  const [search, setSearch]     = useState('')
-  const [catFilter, setCatFilter] = useState('All')
+  const [products,   setProducts]   = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [search,     setSearch]     = useState('')
+  const [cat,        setCat]        = useState('All')
   const [categories, setCategories] = useState(['All'])
 
-  // Cart
-  const [cart, setCart] = useState([])
-
-  // Customer
+  const [cart,          setCart]          = useState([])
   const [customerName,  setCustomerName]  = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [payMethod, setPayMethod]         = useState('cash')
-  const [discount, setDiscount]           = useState('')
-  const [notes, setNotes]                 = useState('')
+  const [payMethod,     setPayMethod]     = useState('cash')
+  const [discount,      setDiscount]      = useState('')
+  const [notes,         setNotes]         = useState('')
+  const [submitting,    setSubmitting]    = useState(false)
+  const [error,         setError]         = useState('')
+  const [receipt,       setReceipt]       = useState(null)
 
-  // UI
-  const [loading,  setLoading]   = useState(false)
-  const [error,    setError]     = useState('')
-  const [receipt,  setReceipt]   = useState(null)  // completed order for receipt
-  const receiptRef = useRef(null)
-
-  // Load all active products once
+  // Load active products
   useEffect(() => {
-    productsAPI.getAllAdmin({ limit: 500, page: 1 })
+    setLoading(true)
+    // getAll returns only is_active=true products (same as customer site)
+    productsAPI.getAll({ limit: 500 })
       .then(({ data }) => {
-        const prods = (data.products || []).filter(p => p.status === 'active')
+        const prods = Array.isArray(data) ? data : (data.products || [])
         setProducts(prods)
-        const cats = ['All', ...new Set(prods.map(p => p.category).filter(Boolean))]
+        const cats = ['All', ...new Set(prods.map(p => p.category).filter(Boolean).sort())]
         setCategories(cats)
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   // Derived
   const filtered = products.filter(p => {
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
-    const matchCat    = catFilter === 'All' || p.category === catFilter
-    return matchSearch && matchCat
+    const q = search.toLowerCase()
+    return (!q || p.name.toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q))
+      && (cat === 'All' || p.category === cat)
   })
 
-  const subtotal      = cart.reduce((s, i) => s + i.price * i.qty, 0)
-  const discountAmt   = Math.min(Math.max(0, Number(discount) || 0), subtotal)
-  const total         = Math.max(0, subtotal - discountAmt)
+  const cartCount = cart.reduce((s, i) => s + i.qty, 0)
+  const subtotal  = cart.reduce((s, i) => s + i.price * i.qty, 0)
+  const discAmt   = Math.min(Math.max(0, Number(discount) || 0), subtotal)
+  const total     = Math.max(0, subtotal - discAmt)
 
   // ── Cart helpers ──────────────────────────────────────────────────────────
-  function addToCart(product) {
+  function addToCart(p) {
+    if (Number(p.stock) <= 0) return
     setCart(prev => {
-      const ex = prev.find(i => i.id === product.id)
-      if (ex) return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i)
-      const price = product.offer_price && Number(product.offer_price) > 0
-        ? Number(product.offer_price) : Number(product.price)
-      return [...prev, { id: product.id, name: product.name, unit: product.unit, price, qty: 1, stock: product.stock }]
+      const ex = prev.find(i => i.id === p.id)
+      if (ex) {
+        if (ex.qty >= Number(p.stock)) return prev   // respect stock
+        return prev.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i)
+      }
+      const price = p.offer_price && Number(p.offer_price) > 0
+        ? Number(p.offer_price) : Number(p.price)
+      return [...prev, { id: p.id, name: p.name, unit: p.unit, price, qty: 1, stock: Number(p.stock), image: p.image_url }]
     })
   }
 
-  function changeQty(id, delta) {
-    setCart(prev => prev
-      .map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)
-      .filter(i => i.qty > 0)
-    )
+  const changeQty  = (id, d) => setCart(prev =>
+    prev.map(i => i.id === id ? { ...i, qty: Math.max(1, Math.min(i.qty + d, i.stock)) } : i)
+  )
+  const setItemQty = (id, v) => setCart(prev =>
+    prev.map(i => i.id === id ? { ...i, qty: Math.max(1, Math.min(parseInt(v) || 1, i.stock)) } : i)
+  )
+  const setItemPrice = (id, v) => setCart(prev =>
+    prev.map(i => i.id === id ? { ...i, price: Math.max(0, parseFloat(v) || 0) } : i)
+  )
+  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id))
+
+  function resetBill() {
+    setCart([]); setCustomerName(''); setCustomerPhone('')
+    setDiscount(''); setNotes(''); setPayMethod('cash'); setError('')
   }
 
-  function setQty(id, val) {
-    const n = Math.max(1, parseInt(val) || 1)
-    setCart(prev => prev.map(i => i.id === id ? { ...i, qty: n } : i))
-  }
-
-  function setPrice(id, val) {
-    const n = Math.max(0, parseFloat(val) || 0)
-    setCart(prev => prev.map(i => i.id === id ? { ...i, price: n } : i))
-  }
-
-  function removeFromCart(id) {
-    setCart(prev => prev.filter(i => i.id !== id))
-  }
-
-  function clearAll() {
-    setCart([])
-    setCustomerName('')
-    setCustomerPhone('')
-    setDiscount('')
-    setNotes('')
-    setPayMethod('cash')
-    setError('')
-  }
-
-  // ── Place order ───────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────────
   async function handleBill() {
     setError('')
-    if (!customerName.trim()) { setError('Enter customer name'); return }
-    if (cart.length === 0)    { setError('Add at least one item'); return }
-
-    setLoading(true)
+    if (!customerName.trim()) { setError('Customer name is required'); return }
+    if (!cart.length)         { setError('Add at least one product'); return }
+    setSubmitting(true)
     try {
       const { data } = await ordersAPI.createWalkIn({
-        customerName: customerName.trim(),
+        customerName:  customerName.trim(),
         customerPhone: customerPhone.trim(),
         items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.qty, price: i.price, unit: i.unit })),
         paymentMethod: payMethod,
-        discount: discountAmt,
+        discount: discAmt,
         notes: notes.trim(),
       })
-      setReceipt({ ...data, customerName: customerName.trim(), customerPhone, payMethod, discountAmt, cartSnapshot: [...cart] })
-      clearAll()
+      setReceipt({ ...data, customerName: customerName.trim(), customerPhone, payMethod, discAmt, snap: [...cart] })
+      resetBill()
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create order')
-    } finally {
-      setLoading(false)
-    }
+      setError(err.response?.data?.error || 'Failed to place order')
+    } finally { setSubmitting(false) }
   }
 
-  // ── Print receipt ─────────────────────────────────────────────────────────
+  // ── Print ─────────────────────────────────────────────────────────────────
   function printReceipt() {
-    const win = window.open('', '_blank', 'width=380,height=600')
+    const r    = receipt
+    const snap = r.snap || []
+    const sub  = snap.reduce((s, i) => s + i.price * i.qty, 0)
+    const win  = window.open('', '_blank', 'width=400,height=680')
     if (!win) return
-    const r = receipt
-    const items = r.cartSnapshot || []
-    const sub   = items.reduce((s, i) => s + i.price * i.qty, 0)
-    win.document.write(`
-      <html><head><title>Receipt</title>
-      <style>
-        body { font-family: 'Courier New', monospace; font-size: 13px; margin: 0; padding: 16px; width: 320px; }
-        h2   { text-align: center; margin: 0 0 4px; font-size: 16px; }
-        .center { text-align: center; }
-        .small  { font-size: 11px; color: #555; }
-        hr   { border: none; border-top: 1px dashed #aaa; margin: 8px 0; }
-        table{ width: 100%; border-collapse: collapse; }
-        td   { padding: 2px 0; vertical-align: top; }
-        .r   { text-align: right; }
-        .total { font-weight: bold; font-size: 15px; }
-        @media print { body { margin: 0; } }
-      </style></head>
-      <body>
-        <h2>🌿 Raksha Farms</h2>
-        <p class="center small">Fresh from farm to your table</p>
-        <hr/>
-        <p class="small"><b>Bill No:</b> ${r.reference_id}</p>
-        <p class="small"><b>Date:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
-        <p class="small"><b>Customer:</b> ${r.customerName}${r.customerPhone ? ` | ${r.customerPhone}` : ''}</p>
-        <p class="small"><b>Payment:</b> ${r.payMethod?.toUpperCase()}</p>
-        <hr/>
-        <table>
-          <tr><td><b>Item</b></td><td class="r"><b>Qty</b></td><td class="r"><b>Price</b></td><td class="r"><b>Amt</b></td></tr>
-          <tr><td colspan="4"><hr/></td></tr>
-          ${items.map(i => `
-            <tr>
-              <td>${i.name}${i.unit ? `<br/><span style="font-size:10px">${i.unit}</span>` : ''}</td>
-              <td class="r">${i.qty}</td>
-              <td class="r">${fmtRs(i.price)}</td>
-              <td class="r">${fmtRs(i.price * i.qty)}</td>
-            </tr>`).join('')}
-          <tr><td colspan="4"><hr/></td></tr>
-          <tr><td colspan="3">Subtotal</td><td class="r">${fmtRs(sub)}</td></tr>
-          ${r.discountAmt > 0 ? `<tr><td colspan="3">Discount</td><td class="r">- ${fmtRs(r.discountAmt)}</td></tr>` : ''}
-          <tr class="total"><td colspan="3">TOTAL</td><td class="r">${fmtRs(r.total)}</td></tr>
-        </table>
-        <hr/>
-        <p class="center small">Thank you for shopping!<br/>Visit us again 🙏</p>
-      </body></html>
-    `)
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Receipt ${r.reference_id}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Courier New',monospace;font-size:13px;padding:20px;width:320px;color:#111}
+      .center{text-align:center} .right{text-align:right} .bold{font-weight:700}
+      .logo{font-size:18px;font-weight:700;letter-spacing:1px}
+      .divider{border:none;border-top:1px dashed #999;margin:10px 0}
+      .row{display:flex;justify-content:space-between;margin:3px 0}
+      .item-name{font-weight:600} .item-unit{font-size:11px;color:#666}
+      .total-row{display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px;padding-top:6px;border-top:2px solid #111}
+      .footer{margin-top:14px;text-align:center;font-size:11px;color:#666;line-height:1.6}
+    </style></head><body>
+    <p class="center logo">🌿 Raksha Farms</p>
+    <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
+    <hr class="divider"/>
+    <div class="row"><span>Bill No</span><span class="bold">${r.reference_id}</span></div>
+    <div class="row"><span>Date &amp; Time</span><span>${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour12:true})}</span></div>
+    <div class="row"><span>Customer</span><span class="bold">${r.customerName}</span></div>
+    ${r.customerPhone ? `<div class="row"><span>Phone</span><span>${r.customerPhone}</span></div>` : ''}
+    <div class="row"><span>Payment</span><span class="bold">${r.payMethod.toUpperCase()}</span></div>
+    <hr class="divider"/>
+    <div class="row bold"><span>Item</span><span>Qty × Rate</span><span class="right">Amt</span></div>
+    <hr class="divider"/>
+    ${snap.map(i => `
+      <div style="margin:5px 0">
+        <div class="item-name">${i.name}</div>
+        ${i.unit ? `<div class="item-unit">${i.unit}</div>` : ''}
+        <div class="row"><span></span><span>${i.qty} × ${fmtRs(i.price)}</span><span class="right bold">${fmtRs(i.price*i.qty)}</span></div>
+      </div>`).join('')}
+    <hr class="divider"/>
+    <div class="row"><span>Subtotal</span><span>${fmtRs(sub)}</span></div>
+    ${r.discAmt > 0 ? `<div class="row"><span>Discount</span><span>− ${fmtRs(r.discAmt)}</span></div>` : ''}
+    <div class="total-row"><span>TOTAL</span><span>${fmtRs(r.total)}</span></div>
+    <div class="footer">
+      Thank you for shopping!<br/>
+      Visit us again 🙏<br/>
+      rakshafarms.in
+    </div>
+    </body></html>`)
     win.document.close()
     win.focus()
-    setTimeout(() => { win.print(); win.close() }, 400)
+    setTimeout(() => { win.print(); win.close() }, 500)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AdminLayout title="Billing / POS">
 
-      {/* ── Receipt modal ──────────────────────────────────────────────────── */}
+      {/* Receipt modal */}
       {receipt && (
-        <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="bg-[#1B4332] px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white">
-                <CheckCircle2 size={20}/>
-                <span className="font-bold">Order Created!</span>
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#1B4332] to-[#2d6a4f] px-6 py-5 text-white">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={22}/>
+                  <span className="text-lg font-bold">Bill Created!</span>
+                </div>
+                <button onClick={() => setReceipt(null)} className="p-1 rounded-lg hover:bg-white/20">
+                  <X size={18}/>
+                </button>
               </div>
-              <button onClick={() => setReceipt(null)} className="text-white/70 hover:text-white">
-                <X size={18}/>
-              </button>
+              <p className="text-green-200 text-sm font-mono">{receipt.reference_id}</p>
             </div>
-            <div className="p-6 space-y-3 text-sm">
-              <div className="flex justify-between text-gray-500"><span>Bill No</span><span className="font-mono font-bold text-gray-800">{receipt.reference_id}</span></div>
-              <div className="flex justify-between text-gray-500"><span>Customer</span><span className="font-semibold text-gray-800">{receipt.customerName}</span></div>
-              {receipt.customerPhone && <div className="flex justify-between text-gray-500"><span>Phone</span><span className="font-semibold text-gray-800">{receipt.customerPhone}</span></div>}
-              <div className="flex justify-between text-gray-500"><span>Payment</span><span className="font-semibold text-gray-800 uppercase">{receipt.payMethod}</span></div>
-              <div className="flex justify-between text-gray-500"><span>Items</span><span className="font-semibold text-gray-800">{receipt.cartSnapshot?.length}</span></div>
-              {receipt.discountAmt > 0 && <div className="flex justify-between text-red-500"><span>Discount</span><span>- {fmtRs(receipt.discountAmt)}</span></div>}
-              <div className="flex justify-between border-t pt-3 text-lg font-extrabold text-[#1B4332]">
-                <span>Total</span><span>{fmtRs(receipt.total)}</span>
+
+            {/* Details */}
+            <div className="p-6 space-y-2.5 text-sm">
+              {[
+                ['Customer', receipt.customerName],
+                receipt.customerPhone && ['Phone', receipt.customerPhone],
+                ['Payment', receipt.payMethod.toUpperCase()],
+                ['Items', `${receipt.snap?.length} product${receipt.snap?.length !== 1 ? 's' : ''}`],
+              ].filter(Boolean).map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-gray-500">{k}</span>
+                  <span className="font-semibold text-gray-800">{v}</span>
+                </div>
+              ))}
+              {receipt.discAmt > 0 && (
+                <div className="flex justify-between text-red-500">
+                  <span>Discount</span><span>− {fmtRs(receipt.discAmt)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center border-t pt-3 mt-1">
+                <span className="text-lg font-extrabold text-gray-800">Total</span>
+                <span className="text-2xl font-black text-[#1B4332]">{fmtRs(receipt.total)}</span>
               </div>
             </div>
-            <div className="border-t px-6 pb-6 flex gap-3">
+
+            {/* Itemised preview */}
+            <div className="px-6 pb-2 max-h-40 overflow-y-auto">
+              {receipt.snap?.map(i => (
+                <div key={i.id} className="flex justify-between text-xs text-gray-500 py-1 border-b last:border-0">
+                  <span>{i.name} × {i.qty}</span>
+                  <span>{fmtRs(i.price * i.qty)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="p-6 pt-4 flex gap-3">
               <button onClick={printReceipt}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#1B4332] text-white rounded-xl font-semibold hover:bg-[#163826] transition">
-                <Printer size={16}/> Print Receipt
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#1B4332] text-white rounded-2xl font-bold hover:bg-[#163826] transition">
+                <Printer size={17}/> Print Receipt
               </button>
               <button onClick={() => setReceipt(null)}
-                className="flex-1 py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 transition">
+                className="flex-1 py-3 border-2 border-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-50 transition">
                 New Bill
               </button>
             </div>
@@ -226,75 +237,103 @@ export default function BillingPage() {
         </div>
       )}
 
-      <div className="flex flex-col xl:flex-row gap-4 h-full">
+      <div className="flex gap-4 h-[calc(100vh-130px)]">
 
-        {/* ── LEFT: Product catalog ─────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
-          {/* Search + filter */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search products…"
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
-              />
-            </div>
-            <div className="relative">
-              <select
-                value={catFilter}
-                onChange={e => setCatFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] bg-white"
-              >
-                {categories.map(c => <option key={c}>{c}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
-            </div>
+        {/* ══ LEFT: Product Catalog ════════════════════════════════════════════ */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3 overflow-hidden">
+
+          {/* Search bar */}
+          <div className="relative">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+            <input
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search products by name or category…"
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X size={15}/>
+              </button>
+            )}
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {categories.map(c => (
+              <button key={c} onClick={() => setCat(c)}
+                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold border transition
+                  ${cat === c ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#1B4332] hover:text-[#1B4332]'}`}>
+                {c}
+              </button>
+            ))}
           </div>
 
           {/* Product grid */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
-            {filtered.length === 0 ? (
-              <div className="py-12 text-center text-gray-400 text-sm">No products found</div>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="w-8 h-8 border-4 border-[#1B4332] border-t-transparent rounded-full animate-spin"/>
+                <p className="text-sm text-gray-400">Loading products…</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                <ShoppingBag size={40} className="mb-3 opacity-30"/>
+                <p className="text-sm">No products found</p>
+              </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3 pr-1">
                 {filtered.map(p => {
-                  const price = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
-                  const inCart = cart.find(i => i.id === p.id)
-                  const outOfStock = Number(p.stock) === 0
+                  const price     = p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price)
+                  const hasOffer  = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
+                  const stock     = Number(p.stock)
+                  const outOfStock = stock <= 0
+                  const inCart    = cart.find(i => i.id === p.id)
                   return (
-                    <button
-                      key={p.id}
-                      disabled={outOfStock}
-                      onClick={() => addToCart(p)}
-                      className={`relative text-left border rounded-xl p-3 transition group
-                        ${outOfStock ? 'opacity-40 cursor-not-allowed border-gray-100' : 'hover:border-[#1B4332] hover:shadow-md cursor-pointer border-gray-100'}
-                        ${inCart ? 'border-[#1B4332] bg-green-50' : 'bg-white'}
-                      `}
+                    <div key={p.id}
+                      onClick={() => !outOfStock && addToCart(p)}
+                      className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all duration-150 select-none
+                        ${outOfStock ? 'opacity-50 cursor-not-allowed border-gray-100' :
+                          inCart ? 'border-[#1B4332] shadow-lg cursor-pointer ring-1 ring-[#1B4332]/20' :
+                          'border-gray-100 hover:border-[#1B4332] hover:shadow-md cursor-pointer'}`}
                     >
+                      {/* Cart badge */}
                       {inCart && (
-                        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#1B4332] rounded-full text-white text-[10px] font-bold flex items-center justify-center">
+                        <div className="absolute top-2 right-2 z-10 w-6 h-6 bg-[#1B4332] rounded-full text-white text-xs font-black flex items-center justify-center shadow">
                           {inCart.qty}
-                        </span>
+                        </div>
                       )}
-                      {p.image_url && (
-                        <img src={p.image_url} alt={p.name}
-                          className="w-full aspect-square object-cover rounded-lg mb-2"
-                          onError={e => { e.target.style.display = 'none' }}
-                        />
-                      )}
-                      <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{p.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.unit}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-sm font-bold text-[#1B4332]">{fmtRs(price)}</span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                          outOfStock ? 'bg-red-100 text-red-600' : Number(p.stock) <= 5 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-700'
-                        }`}>
-                          {outOfStock ? 'Out' : `${p.stock} left`}
-                        </span>
+
+                      {/* Image */}
+                      <div className="aspect-square bg-gray-50 overflow-hidden">
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.name}
+                            className="w-full h-full object-cover"
+                            onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-3xl">🌿</div>' }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-3xl">🌿</div>
+                        )}
                       </div>
-                    </button>
+
+                      {/* Info */}
+                      <div className="p-2.5">
+                        <p className="text-xs font-bold text-gray-800 leading-tight line-clamp-2 mb-1">{p.name}</p>
+                        {p.unit && <p className="text-[10px] text-gray-400 mb-1.5">{p.unit}</p>}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-sm font-black text-[#1B4332]">{fmtRs(price)}</span>
+                            {hasOffer && <span className="text-[10px] text-gray-400 line-through ml-1">{fmtRs(p.price)}</span>}
+                          </div>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            outOfStock  ? 'bg-red-100 text-red-600' :
+                            stock <= 5  ? 'bg-orange-100 text-orange-600' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {outOfStock ? 'Out' : `${stock}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   )
                 })}
               </div>
@@ -302,145 +341,150 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* ── RIGHT: Bill panel ─────────────────────────────────────────────── */}
-        <div className="w-full xl:w-[380px] flex flex-col gap-4">
+        {/* ══ RIGHT: Bill Panel ════════════════════════════════════════════════ */}
+        <div className="w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-hidden">
 
-          {/* Customer info */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-            <h2 className="font-bold text-gray-800 flex items-center gap-2"><User size={16}/> Customer Info</h2>
-            <input
-              value={customerName}
-              onChange={e => setCustomerName(e.target.value)}
+          {/* Customer */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2.5">
+            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+              <User size={15} className="text-[#1B4332]"/> Customer Details
+            </h3>
+            <input value={customerName} onChange={e => setCustomerName(e.target.value)}
               placeholder="Customer name *"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
-            />
-            <input
-              value={customerPhone}
-              onChange={e => setCustomerPhone(e.target.value)}
-              placeholder="Phone number (optional)"
-              type="tel"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
-            />
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Notes (optional)"
-              rows={2}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"
-            />
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+            <div className="relative">
+              <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+              <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                placeholder="Phone number (optional)" type="tel"
+                className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+            </div>
+            <div className="relative">
+              <StickyNote size={13} className="absolute left-3 top-3 text-gray-400"/>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notes (optional)" rows={2}
+                className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"/>
+            </div>
           </div>
 
           {/* Cart */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex-1 overflow-y-auto" style={{ maxHeight: '340px' }}>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2"><ShoppingBag size={16}/> Cart</h2>
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                <ShoppingBag size={15} className="text-[#1B4332]"/>
+                Cart
+                {cartCount > 0 && <span className="ml-1 bg-[#1B4332] text-white text-[10px] font-black px-2 py-0.5 rounded-full">{cartCount}</span>}
+              </h3>
               {cart.length > 0 && (
-                <button onClick={() => setCart([])} className="text-xs text-red-500 hover:underline">Clear</button>
+                <button onClick={() => setCart([])} className="text-xs text-red-400 hover:text-red-600 font-medium">Clear all</button>
               )}
             </div>
 
             {cart.length === 0 ? (
-              <div className="py-8 text-center text-gray-400 text-sm">Tap a product to add it</div>
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-2">
+                <ShoppingBag size={36}/>
+                <p className="text-xs">Tap a product to add</p>
+              </div>
             ) : (
-              <div className="space-y-2">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
                 {cart.map(item => (
-                  <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded-xl">
+                  <div key={item.id} className="bg-gray-50 rounded-xl p-2.5 flex gap-2">
+                    {/* Product image thumbnail */}
+                    {item.image && (
+                      <img src={item.image} alt={item.name}
+                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                        onError={e => { e.target.style.display = 'none' }}
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-800 truncate">{item.name}</p>
-                      <p className="text-[10px] text-gray-400">{item.unit}</p>
+                      <p className="text-xs font-bold text-gray-800 truncate leading-tight">{item.name}</p>
+                      {item.unit && <p className="text-[10px] text-gray-400">{item.unit}</p>}
                       {/* Editable price */}
                       <div className="flex items-center gap-1 mt-1">
                         <span className="text-[10px] text-gray-400">₹</span>
-                        <input
-                          type="number"
-                          value={item.price}
-                          onChange={e => setPrice(item.id, e.target.value)}
-                          className="w-16 text-xs border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
-                          min={0}
-                          step={0.5}
-                        />
-                        <span className="text-[10px] text-gray-500 ml-1">= {fmtRs(item.price * item.qty)}</span>
+                        <input type="number" value={item.price}
+                          onChange={e => setItemPrice(item.id, e.target.value)}
+                          className="w-16 text-xs border border-gray-200 bg-white rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
+                          min={0} step={0.5}/>
+                        <span className="text-[10px] text-gray-500 ml-0.5 font-semibold">= {fmtRs(item.price * item.qty)}</span>
                       </div>
                     </div>
-                    {/* Qty controls */}
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => changeQty(item.id, -1)} className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
-                        <Minus size={11}/>
+                    {/* Qty + remove */}
+                    <div className="flex flex-col items-end gap-1.5">
+                      <button onClick={() => removeItem(item.id)} className="text-red-300 hover:text-red-500">
+                        <X size={12}/>
                       </button>
-                      <input
-                        type="number"
-                        value={item.qty}
-                        onChange={e => setQty(item.id, e.target.value)}
-                        className="w-8 text-center text-xs border border-gray-200 rounded focus:outline-none"
-                        min={1}
-                      />
-                      <button onClick={() => changeQty(item.id, 1)} className="w-6 h-6 rounded-lg bg-[#1B4332] hover:bg-[#163826] text-white flex items-center justify-center">
-                        <Plus size={11}/>
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => changeQty(item.id, -1)}
+                          className="w-5 h-5 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center">
+                          <Minus size={9}/>
+                        </button>
+                        <input type="number" value={item.qty}
+                          onChange={e => setItemQty(item.id, e.target.value)}
+                          className="w-7 text-center text-xs border border-gray-200 bg-white rounded focus:outline-none"
+                          min={1} max={item.stock}/>
+                        <button onClick={() => changeQty(item.id, 1)}
+                          className="w-5 h-5 rounded-md bg-[#1B4332] hover:bg-[#163826] text-white flex items-center justify-center">
+                          <Plus size={9}/>
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => removeFromCart(item.id)} className="text-red-400 hover:text-red-600 mt-0.5">
-                      <Trash2 size={13}/>
-                    </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Payment + totals */}
+          {/* Payment + Totals + Action */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             {/* Payment method */}
-            <div className="grid grid-cols-4 gap-2">
-              {PAY_METHODS.map(m => (
-                <button
-                  key={m.value}
-                  onClick={() => setPayMethod(m.value)}
-                  className={`py-2 rounded-xl text-xs font-semibold border transition
-                    ${payMethod === m.value ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 hover:border-[#1B4332]'}`}
-                >
-                  {m.label}
+            <div className="grid grid-cols-4 gap-1.5">
+              {PAY.map(m => (
+                <button key={m.value} onClick={() => setPayMethod(m.value)}
+                  className={`py-2 rounded-xl text-[11px] font-bold border-2 transition flex flex-col items-center gap-0.5
+                    ${payMethod === m.value ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#1B4332]'}`}>
+                  <span>{m.emoji}</span>
+                  <span>{m.label}</span>
                 </button>
               ))}
             </div>
 
             {/* Discount */}
-            <div className="flex items-center gap-2">
-              <Tag size={14} className="text-gray-400 flex-shrink-0"/>
-              <input
-                type="number"
-                value={discount}
-                onChange={e => setDiscount(e.target.value)}
-                placeholder="Discount amount (₹)"
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
-                min={0}
-              />
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              <Tag size={13} className="text-amber-600 flex-shrink-0"/>
+              <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+                placeholder="Discount (₹)" min={0}
+                className="flex-1 bg-transparent text-sm focus:outline-none text-amber-800 placeholder-amber-400 font-medium"/>
+              {discAmt > 0 && <span className="text-xs font-bold text-amber-700">−{fmtRs(discAmt)}</span>}
             </div>
 
             {/* Totals */}
-            <div className="space-y-1.5 text-sm border-t pt-3">
+            <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-500">
-                <span>Subtotal ({cart.reduce((s,i)=>s+i.qty,0)} items)</span>
+                <span>{cart.reduce((s,i)=>s+i.qty,0)} items</span>
                 <span>{fmtRs(subtotal)}</span>
               </div>
-              {discountAmt > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Discount</span><span>− {fmtRs(discountAmt)}</span>
+              {discAmt > 0 && (
+                <div className="flex justify-between text-red-500 font-medium">
+                  <span>Discount</span><span>− {fmtRs(discAmt)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-extrabold text-lg text-[#1B4332] border-t pt-2">
+              <div className="flex justify-between font-black text-xl text-[#1B4332] border-t-2 border-dashed pt-2 mt-1">
                 <span>Total</span><span>{fmtRs(total)}</span>
               </div>
             </div>
 
-            {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{error}</p>
+            )}
 
-            <button
-              onClick={handleBill}
-              disabled={loading || cart.length === 0}
-              className="w-full py-3.5 bg-[#1B4332] text-white rounded-xl font-bold text-base hover:bg-[#163826] transition disabled:opacity-40 flex items-center justify-center gap-2"
-            >
-              <Printer size={18}/>
-              {loading ? 'Processing…' : `Bill & Print  ${total > 0 ? fmtRs(total) : ''}`}
+            <button onClick={handleBill}
+              disabled={submitting || !cart.length || !customerName.trim()}
+              className="w-full py-4 bg-gradient-to-r from-[#1B4332] to-[#2d6a4f] text-white rounded-2xl font-black text-base shadow-lg hover:shadow-xl hover:from-[#163826] hover:to-[#256041] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              {submitting ? (
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Processing…</>
+              ) : (
+                <><Printer size={18}/> Bill &amp; Print {total > 0 ? fmtRs(total) : ''}</>
+              )}
             </button>
           </div>
         </div>
