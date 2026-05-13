@@ -40,18 +40,34 @@ export default function AdminLayout({ children, title }) {
   const bellRef           = useRef(null)
 
   useEffect(() => {
-    // localStorage is the source of truth — always persists across refreshes.
-    // Cookie is a bonus for server-side middleware; localStorage is what matters here.
-    const token = localStorage.getItem('admin_token') || Cookies.get('admin_token')
-    if (!token) { window.location.replace('/login'); return }
+    const lsToken     = localStorage.getItem('admin_token')
+    const cookieToken = Cookies.get('admin_token')
+    const token       = lsToken || cookieToken
+
+    // Debug — visible in browser console (F12 → Console)
+    console.log('[AdminAuth] localStorage token:', lsToken ? lsToken.slice(0, 20) + '…' : 'NULL')
+    console.log('[AdminAuth] cookie token:      ', cookieToken ? cookieToken.slice(0, 20) + '…' : 'NULL')
+
+    if (!token) {
+      console.log('[AdminAuth] → NO TOKEN → redirecting to /login')
+      window.location.replace('/login')
+      return
+    }
+
     try {
-      // JWT uses base64url (- and _ instead of + and /). atob() only handles
-      // standard base64, so we must convert before decoding.
       const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
       const payload = JSON.parse(atob(b64))
-      if (!payload?.id) { window.location.replace('/login'); return }
+      console.log('[AdminAuth] JWT payload id:', payload?.id, 'name:', payload?.name)
+      if (!payload?.id) {
+        console.log('[AdminAuth] → NO id in payload → redirecting to /login')
+        window.location.replace('/login')
+        return
+      }
       setUser(payload)
-    } catch { window.location.replace('/login') }
+    } catch (e) {
+      console.log('[AdminAuth] → JWT decode error →', e.message, '→ redirecting to /login')
+      window.location.replace('/login')
+    }
   }, [])
 
   useEffect(() => {
