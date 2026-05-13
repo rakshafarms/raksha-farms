@@ -46,28 +46,30 @@ export default function MyOrdersPage() {
 
   const [filter, setFilter]         = useState('all')
   const [syncing, setSyncing]       = useState(true)
-  const [sessionExpired, setSessionExpired] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(
+    () => !!user && !localStorage.getItem('auth_token')
+  )
   const didSync = useRef(false)
 
   const allOrders = getOrdersByUser(user?.email)
-  const isLoggedIn = !!user
-  const hasToken   = !!localStorage.getItem('auth_token')
 
-  // Listen for session-expired event (token 401)
+  // Listen for session-expired event (token 401 from backend)
   useEffect(() => {
-    function onExpired() { setSessionExpired(true) }
+    function onExpired() { setSessionExpired(true); setSyncing(false) }
     window.addEventListener('rf:session-expired', onExpired)
     return () => window.removeEventListener('rf:session-expired', onExpired)
   }, [])
 
   useEffect(() => {
+    // No token → don't even try; show session expired immediately
+    if (!localStorage.getItem('auth_token')) {
+      setSyncing(false)
+      return
+    }
+
     async function doSync(isMount = false) {
       if (isMount) setSyncing(true)
-      const token = localStorage.getItem('auth_token')
-      if (token) {
-        try { await syncOrdersByUser() } catch { /* silent */ }
-      }
-      // Also auto-sync by phone if the profile has one (catches guest orders)
+      try { await syncOrdersByUser() } catch { /* silent */ }
       const phone = user?.phone
       if (phone) {
         try { await syncOrdersByPhone(phone) } catch { /* silent */ }
@@ -118,14 +120,17 @@ export default function MyOrdersPage() {
 
       {/* Session expired banner */}
       {sessionExpired && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 flex items-center gap-3">
-          <span className="text-2xl flex-shrink-0">🔒</span>
-          <div className="flex-1">
-            <p className="font-semibold text-amber-800 text-sm">Session expired</p>
-            <p className="text-amber-600 text-xs mt-0.5">Please sign in again to view your orders</p>
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-5">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-2xl flex-shrink-0">🔒</span>
+            <div>
+              <p className="font-bold text-amber-800">Session expired</p>
+              <p className="text-amber-700 text-sm mt-0.5">Your login session has ended. Sign in again to see all your orders.</p>
+            </div>
           </div>
-          <Link to="/login" className="flex-shrink-0 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors">
-            Sign In
+          <Link to="/login"
+            className="block w-full py-3 text-center bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-sm">
+            Sign In Again →
           </Link>
         </div>
       )}

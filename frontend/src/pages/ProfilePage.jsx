@@ -76,17 +76,26 @@ export default function ProfilePage() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [cancelConfirmId, setCancelConfirmId] = useState(null)
   const [ordersLoading, setOrdersLoading]     = useState(true)
-  const [sessionExpired, setSessionExpired]   = useState(false)
+  // session expired = token missing or rejected by backend
+  const [sessionExpired, setSessionExpired]   = useState(
+    () => !!user && !localStorage.getItem('auth_token')  // detect immediately on render
+  )
 
   // Sync on mount and listen for session-expired
   useEffect(() => {
+    // If there's no token at all, mark expired right away — no point calling API
+    if (!localStorage.getItem('auth_token')) {
+      setSessionExpired(true)
+      setOrdersLoading(false)
+      return
+    }
     async function init() {
       setOrdersLoading(true)
       await syncOrdersByUser().catch(() => {})
       setOrdersLoading(false)
     }
     init()
-    function onExpired() { setSessionExpired(true) }
+    function onExpired() { setSessionExpired(true); setOrdersLoading(false) }
     window.addEventListener('rf:session-expired', onExpired)
     return () => window.removeEventListener('rf:session-expired', onExpired)
   }, []) // eslint-disable-line
@@ -226,15 +235,17 @@ export default function ProfilePage() {
 
       {/* Session expired banner */}
       {sessionExpired && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 flex items-center gap-3">
-          <span className="text-2xl flex-shrink-0">🔒</span>
-          <div className="flex-1">
-            <p className="font-semibold text-amber-800 text-sm">Session expired — please sign in again</p>
-            <p className="text-amber-600 text-xs mt-0.5">Your orders and addresses couldn't be loaded</p>
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-5">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-2xl flex-shrink-0">🔒</span>
+            <div>
+              <p className="font-bold text-amber-800">Session expired</p>
+              <p className="text-amber-700 text-sm mt-0.5">Your login session has ended. Sign in again to see your orders, addresses, and subscriptions.</p>
+            </div>
           </div>
           <button onClick={() => { logout(); navigate('/login') }}
-            className="flex-shrink-0 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors">
-            Sign In
+            className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-sm">
+            Sign In Again →
           </button>
         </div>
       )}
