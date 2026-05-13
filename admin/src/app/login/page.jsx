@@ -78,7 +78,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Admin access only — unauthorized access is prohibited
+          Admin access only · v2.1
         </p>
       </div>
     </div>

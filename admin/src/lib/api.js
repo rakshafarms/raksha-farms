@@ -16,25 +16,12 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Redirect to login on 401 — but only for authenticated routes, not polling.
-// Background polls (orders/stats, low-stock) can transiently fail; we must not
-// wipe the session just because a single background request got a 401.
-const POLLING_PATHS = ['/orders/stats', '/orders/events', '/products/low-stock']
+// Never auto-logout on 401. A transient backend error, Render cold-start,
+// or any single failed request must NOT wipe the admin session.
+// The user logs out explicitly via the Sign Out button.
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
-      const url = err.config?.url || ''
-      const isPolling = POLLING_PATHS.some(p => url.includes(p))
-      if (!isPolling) {
-        // Clear cookie via server-side route so it's reliably removed
-        fetch('/api/set-token', { method: 'DELETE' }).catch(() => {})
-        localStorage.removeItem('admin_token')
-        window.location.href = '/login'
-      }
-    }
-    return Promise.reject(err)
-  }
+  (err) => Promise.reject(err)
 )
 
 // ── Auth ──────────────────────────────────────────────
