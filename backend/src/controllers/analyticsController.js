@@ -57,16 +57,21 @@ export async function getDashboardStats(req, res) {
         GROUP BY d.date ORDER BY d.date ASC
       `),
 
-      // Top 5 products
+      // Top 5 products — filter out items with non-UUID ids to avoid cast errors
       query(`
         SELECT p.name, p.image_url, p.category,
                COUNT(DISTINCT o.id) AS order_count,
                SUM((item->>'quantity')::int) AS units_sold
         FROM orders o
-        CROSS JOIN LATERAL jsonb_array_elements(o.items) AS item
-        JOIN products p ON p.id = (item->>'id')::uuid
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE jsonb_typeof(o.items) WHEN 'array' THEN o.items ELSE '[]'::jsonb END
+        ) AS item
+        LEFT JOIN products p ON p.id::text = item->>'id'
         WHERE o.status NOT IN ('cancelled','rejected')
-        GROUP BY p.id ORDER BY units_sold DESC LIMIT 5
+          AND p.id IS NOT NULL
+          AND (item->>'quantity') ~ '^[0-9]+$'
+        GROUP BY p.id, p.name, p.image_url, p.category
+        ORDER BY units_sold DESC LIMIT 5
       `),
 
       // Recent 8 orders
@@ -140,9 +145,14 @@ export async function getCategoryRevenue(req, res) {
         SUM((item->>'quantity')::int * (item->>'price')::numeric) AS revenue,
         COUNT(DISTINCT o.id) AS orders
       FROM orders o
-      CROSS JOIN LATERAL jsonb_array_elements(o.items) AS item
-      JOIN products p ON p.id = (item->>'id')::uuid
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE jsonb_typeof(o.items) WHEN 'array' THEN o.items ELSE '[]'::jsonb END
+      ) AS item
+      LEFT JOIN products p ON p.id::text = item->>'id'
       WHERE o.status NOT IN ('cancelled','rejected')
+        AND p.id IS NOT NULL
+        AND (item->>'quantity') ~ '^[0-9]+$'
+        AND (item->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
       GROUP BY p.category ORDER BY revenue DESC
     `)
     res.json(rows)
