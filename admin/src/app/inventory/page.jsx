@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, categoriesAPI } from '../../lib/api'
-import { AlertTriangle, Package, Search, Printer } from 'lucide-react'
+import { AlertTriangle, Package, Search, Printer, Download } from 'lucide-react'
 
 const FALLBACK_CATEGORIES = [
   { slug:'vegetables', name:'Vegetables' },{ slug:'fruits', name:'Fruits' },
@@ -139,6 +139,50 @@ export default function InventoryPage() {
     setTimeout(() => { win.print() }, 400)
   }
 
+  function downloadCSV() {
+    const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
+    const headers = ['Product', 'Category', 'Unit', 'Stock', 'Level', 'Price', 'Offer Price']
+    const rows = filtered.map(p => {
+      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+      return [
+        p.name,
+        p.category || '',
+        p.unit || '',
+        p.stock,
+        levelLabel[level],
+        p.price || '',
+        p.offer_price || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    })
+    const csv = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventory-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function downloadExcel() {
+    const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
+    const headers = ['Product', 'Category', 'Unit', 'Stock', 'Level', 'Price', 'Offer Price']
+    const body = filtered.map(p => {
+      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+      return [p.name, p.category || '', p.unit || '', p.stock, levelLabel[level], p.price || '', p.offer_price || '']
+        .map(v => `<td>${String(v).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</td>`)
+        .join('')
+    }).map(r => `<tr>${r}</tr>`).join('')
+    const html = `<table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventory-${new Date().toISOString().slice(0, 10)}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Stats
   const outOfStock  = products.filter(p => p.stock === 0).length
   const critical    = products.filter(p => p.stock > 0 && p.stock <= 5).length
@@ -230,13 +274,29 @@ export default function InventoryPage() {
             <h2 className="font-semibold text-gray-800">Stock Levels</h2>
             <span className="text-xs text-gray-400">{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
           </div>
-          <button
-            onClick={printInventory}
-            disabled={loading || filtered.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1B4332] hover:bg-[#163826] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
-          >
-            <Printer size={15}/> Print Report
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadCSV}
+              disabled={loading || filtered.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-600 text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Download size={14}/> CSV
+            </button>
+            <button
+              onClick={downloadExcel}
+              disabled={loading || filtered.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-600 text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Download size={14}/> Excel
+            </button>
+            <button
+              onClick={printInventory}
+              disabled={loading || filtered.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#1B4332] hover:bg-[#163826] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
+            >
+              <Printer size={14}/> Print
+            </button>
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead>
