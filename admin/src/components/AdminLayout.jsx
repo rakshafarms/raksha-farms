@@ -40,15 +40,18 @@ export default function AdminLayout({ children, title }) {
   const bellRef           = useRef(null)
 
   useEffect(() => {
-    const token = Cookies.get('admin_token') || localStorage.getItem('admin_token')
-    if (!token) { router.replace('/login'); return }
+    // localStorage is the source of truth — always persists across refreshes.
+    // Cookie is a bonus for server-side middleware; localStorage is what matters here.
+    const token = localStorage.getItem('admin_token') || Cookies.get('admin_token')
+    if (!token) { window.location.replace('/login'); return }
     try {
       // JWT uses base64url (- and _ instead of + and /). atob() only handles
       // standard base64, so we must convert before decoding.
       const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
       const payload = JSON.parse(atob(b64))
+      if (!payload?.id) { window.location.replace('/login'); return }
       setUser(payload)
-    } catch { router.replace('/login') }
+    } catch { window.location.replace('/login') }
   }, [])
 
   useEffect(() => {

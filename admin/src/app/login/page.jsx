@@ -21,15 +21,17 @@ export default function LoginPage() {
         setError('Access denied: admin accounts only')
         return
       }
-      // Set cookie server-side (reliable for Next.js middleware on page refresh)
-      await fetch('/api/set-token', {
+      // Store in localStorage — this persists across refreshes and is the
+      // primary auth source for AdminLayout.
+      localStorage.setItem('admin_token', data.token)
+      // Also set cookie server-side (bonus: prevents logged-in user landing on /login)
+      fetch('/api/set-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: data.token }),
-      })
-      // Also keep in localStorage as fallback for client-side API requests
-      localStorage.setItem('admin_token', data.token)
-      router.replace('/')
+      }).catch(() => {}) // non-blocking, not critical
+      // Full navigation so AdminLayout reads a fresh localStorage on the new page
+      window.location.replace('/')
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed')
     } finally { setLoading(false) }

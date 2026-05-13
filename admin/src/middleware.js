@@ -3,19 +3,17 @@ import { NextResponse } from 'next/server'
 export function middleware(request) {
   const { pathname } = request.nextUrl
 
-  // Never intercept API routes — they handle auth themselves,
-  // and /api/set-token must be reachable WITHOUT a cookie (it IS the login step).
+  // Skip API routes and static assets entirely
   if (pathname.startsWith('/api/')) return NextResponse.next()
 
+  // Only one server-side guard: prevent a logged-in user from landing on /login
+  // All other auth (unauthenticated → /login) is handled client-side by AdminLayout,
+  // which reads from localStorage — reliable across refreshes without cookie issues.
   const token = request.cookies.get('admin_token')?.value
-  const isLoginPage = pathname === '/login'
-
-  if (!token && !isLoginPage) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-  if (token && isLoginPage) {
+  if (token && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url))
   }
+
   return NextResponse.next()
 }
 
