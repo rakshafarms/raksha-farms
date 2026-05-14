@@ -200,10 +200,8 @@ export default function ProfilePage() {
   }
 
   const deliveredOrders = orders.filter(o => o.status === 'delivered')
-  // Spent = all orders except cancelled/rejected (money committed or already paid)
-  const totalSpent      = orders
-    .filter(o => !['cancelled', 'rejected'].includes(o.status))
-    .reduce((s, o) => s + Number(o.total || 0), 0)
+  // Total value of all orders placed (all statuses)
+  const totalSpent      = orders.reduce((s, o) => s + Number(o.total || 0), 0)
   const activeSubs      = mySubs.filter(s => s.is_active).length
 
   const TABS = [
@@ -295,7 +293,7 @@ export default function ProfilePage() {
           {ordersLoading
             ? <div className="h-6 w-14 bg-gray-200 rounded animate-pulse mx-auto mb-1" />
             : <p className="text-lg sm:text-xl font-black text-earth-600 truncate">₹{totalSpent.toLocaleString('en-IN')}</p>}
-          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Spent</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 font-medium">Order Value</p>
         </div>
       </div>
 

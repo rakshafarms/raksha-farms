@@ -131,10 +131,8 @@ export default function MyOrdersPage() {
   const filtered    = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter)
   const counts      = allOrders.reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {})
   const delivered   = counts.delivered || 0
-  // Spent = all orders except cancelled/rejected (money committed or already paid)
-  const totalSpent  = allOrders
-    .filter(o => !['cancelled', 'rejected'].includes(o.status))
-    .reduce((s, o) => s + Number(o.total || 0), 0)
+  // Total value of all orders placed (all statuses)
+  const totalSpent  = allOrders.reduce((s, o) => s + Number(o.total || 0), 0)
 
   // ── Full-page skeleton while initial load ─────────────────────────────
   if (syncing && allOrders.length === 0) {
@@ -222,7 +220,7 @@ export default function MyOrdersPage() {
           </div>
           <div className="card p-3 text-center">
             <p className="text-xl font-black text-forest-600">₹{totalSpent.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Total Spent</p>
+            <p className="text-xs text-gray-400 mt-0.5">Order Value</p>
           </div>
         </div>
       )}
