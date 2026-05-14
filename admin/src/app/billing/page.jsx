@@ -134,6 +134,8 @@ export default function BillingPage() {
     const sub  = snap.reduce((s, i) => s + i.price * i.qty, 0)
     const win  = window.open('', '_blank', 'width=400,height=680')
     if (!win) return
+    // Use absolute URL so the logo loads correctly in the print popup window
+    const logoUrl = `${window.location.origin}/images/raksha-farms-logo.png`
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Receipt ${r.reference_id}</title>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
@@ -146,7 +148,11 @@ export default function BillingPage() {
       .total-row{display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px;padding-top:6px;border-top:2px solid #111}
       .footer{margin-top:14px;text-align:center;font-size:11px;color:#666;line-height:1.6}
     </style></head><body>
-    <p class="center logo">🌿 Raksha Farms</p>
+    <div class="center" style="margin-bottom:6px">
+      <img src="${logoUrl}" alt="Raksha Farms" style="width:150px;height:auto;display:block;margin:0 auto"
+        onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'"/>
+      <p id="logo-fallback" class="logo" style="display:none">🌿 Raksha Farms</p>
+    </div>
     <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
     <hr class="divider"/>
     <div class="row"><span>Bill No</span><span class="bold">${r.reference_id}</span></div>
@@ -170,7 +176,7 @@ export default function BillingPage() {
     <div class="footer">
       Thank you for shopping!<br/>
       Visit us again 🙏<br/>
-      rakshafarms.in
+      www.rakshafarms.com
     </div>
     </body></html>`)
     win.document.close()

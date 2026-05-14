@@ -99,6 +99,7 @@ function printOrderBill(o) {
 
   const win = window.open('', '_blank', 'width=420,height=680')
   if (!win) return
+  const logoUrl = `${window.location.origin}/images/raksha-farms-logo.png`
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
   <title>Bill — ${refId}</title>
   <style>
@@ -116,7 +117,11 @@ function printOrderBill(o) {
       background:${o.status==='delivered'?'#d1fae5':'#fef9c3'};color:${o.status==='delivered'?'#065f46':'#92400e'}}
     @media print{body{padding:12px}}
   </style></head><body>
-  <p class="center logo">🌿 Raksha Farms</p>
+  <div class="center" style="margin-bottom:6px">
+    <img src="${logoUrl}" alt="Raksha Farms" style="width:150px;height:auto;display:block;margin:0 auto"
+      onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'"/>
+    <p id="logo-fallback" class="logo" style="display:none">🌿 Raksha Farms</p>
+  </div>
   <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
   <p class="center" style="margin-top:4px"><span class="badge">${walkIn ? '🏪 Walk-in / Offline' : '🌐 Online Order'}</span></p>
   <hr class="divider"/>
@@ -135,7 +140,7 @@ function printOrderBill(o) {
   ${fee > 0 ? `<div class="row"><span>Delivery Fee</span><span>₹${fee.toLocaleString('en-IN')}</span></div>` : ''}
   ${discount > 0.5 ? `<div class="row"><span>Discount</span><span>− ₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
   <div class="total-row"><span>TOTAL</span><span>₹${Number(o.total||0).toLocaleString('en-IN')}</span></div>
-  <div class="footer">Thank you for shopping with us! 🙏<br/>Visit us again · rakshafarms.in</div>
+  <div class="footer">Thank you for shopping with us! 🙏<br/>Visit us again · www.rakshafarms.com</div>
   </body></html>`)
   win.document.close()
   win.focus()
