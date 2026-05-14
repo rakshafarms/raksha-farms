@@ -848,8 +848,6 @@ export default function CheckoutPage() {
                   icon={<RazorpayIcon />} title="Pay Online" subtitle="Cards, UPI, Netbanking & Wallets via Razorpay" recommended />
                 <PaymentOption id="cod" selected={paymentMethod === 'cod'} onSelect={() => setPaymentMethod('cod')}
                   icon={<CodIcon />} title="Cash on Delivery" subtitle="Pay when your order arrives" />
-                <PaymentOption id="upi" selected={paymentMethod === 'upi'} onSelect={() => setPaymentMethod('upi')}
-                  icon={<UpiIcon />} title="UPI (Manual)" subtitle="Scan our QR code or pay directly to UPI ID" />
               </div>
 
               {paymentMethod === 'razorpay' && (
@@ -876,31 +874,6 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {paymentMethod === 'upi' && (
-                <div className="bg-forest-50 rounded-2xl p-5 text-center border border-forest-100 mb-4 animate-slide-up">
-                  <p className="text-sm font-semibold text-gray-700 mb-3">Scan & Pay</p>
-                  <div className="w-36 h-36 mx-auto bg-white rounded-2xl border-2 border-forest-200 flex flex-col items-center justify-center mb-3 shadow-sm">
-                    <svg className="w-16 h-16 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                    <span className="text-xs text-gray-400 mt-1">QR Code</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 bg-white rounded-xl px-4 py-2.5 border border-forest-200 w-fit mx-auto shadow-sm">
-                    <span className="text-forest-600 font-mono font-bold text-sm">{OWNER_UPI_ID}</span>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(OWNER_UPI_ID); addToast('UPI ID copied!', 'success') }}
-                      className="text-gray-400 hover:text-forest-600 transition-colors"
-                      title="Copy UPI ID"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">Complete payment, then click Place Order</p>
-                </div>
-              )}
-
               {/* Order review */}
               <div className="bg-sage-50 rounded-xl p-4 mb-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Order Summary</p>
@@ -916,9 +889,7 @@ export default function CheckoutPage() {
                   <div className="flex justify-between text-gray-500">
                     <span>Payment</span>
                     <span className="font-medium text-gray-700 capitalize">
-                      {paymentMethod === 'cod' ? 'Cash on Delivery'
-                        : paymentMethod === 'razorpay' ? 'Online (Razorpay)'
-                        : 'UPI (Manual)'}
+                      {paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online (Razorpay)'}
                     </span>
                   </div>
                 </div>
@@ -944,7 +915,7 @@ export default function CheckoutPage() {
                       </svg>
                       {paymentMethod === 'razorpay' ? 'Opening Payment...' : 'Placing Order...'}
                     </>
-                  ) : paymentMethod === 'razorpay' ? (
+                  ) : paymentMethod !== 'cod' ? (
                     <>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
