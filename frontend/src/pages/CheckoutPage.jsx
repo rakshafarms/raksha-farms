@@ -39,7 +39,7 @@ export default function CheckoutPage() {
   const { user }        = useAuth()
   const { addToast }    = useToast()
   const navigate        = useNavigate()
-  const { addresses, addAddress, deleteAddress, LABEL_ICONS } = useAddresses()
+  const { addresses, loading: addressesLoading, addAddress, deleteAddress, LABEL_ICONS } = useAddresses()
   const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
   const [step, setStep]   = useState(1)
@@ -621,7 +621,26 @@ export default function CheckoutPage() {
               </h2>
 
               {/* ── Saved Addresses (Swiggy/Zomato style) ── */}
-              {uniqueAddresses.length > 0 && (
+              {/* Loading skeleton while addresses are being fetched */}
+              {addressesLoading && (
+                <div className="mb-5">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Saved Addresses</p>
+                  <div className="flex flex-col gap-2">
+                    {[1, 2].map(n => (
+                      <div key={n} className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-gray-100 bg-white animate-pulse">
+                        <div className="w-5 h-5 rounded-full bg-gray-200 flex-shrink-0"/>
+                        <div className="w-8 h-8 rounded-lg bg-gray-200 flex-shrink-0"/>
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 bg-gray-200 rounded w-16"/>
+                          <div className="h-2.5 bg-gray-100 rounded w-48"/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!addressesLoading && uniqueAddresses.length > 0 && (
                 <div className="mb-5">
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Saved Addresses</p>
                   <div className="flex flex-col gap-2">
@@ -713,8 +732,8 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Manual form — shown when adding a new address OR no saved addresses */}
-              {(selectedAddressId === null || uniqueAddresses.length === 0) && (
+              {/* Manual form — shown when adding a new address OR no saved addresses (hidden while loading) */}
+              {!addressesLoading && (selectedAddressId === null || uniqueAddresses.length === 0) && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label="Full Name" placeholder="e.g. Priya Sharma" value={form.name} onChange={(v) => setField('name', v)} error={errors.name} required />

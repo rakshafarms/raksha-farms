@@ -16,19 +16,34 @@ export function AddressProvider({ children }) {
     const token = getToken()
     if (!token) { setAddresses([]); return }
     setLoading(true)
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/addresses`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.status === 401) {
-        window.dispatchEvent(new CustomEvent('rf:token-expired'))
-        return
+    // Retry up to 3× with delays to survive Render cold-start (0s / 6s / 12s)
+    const delays = [0, 6000, 12000]
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]))
+      // Re-check token in case user logged out during wait
+      if (!getToken()) { setAddresses([]); setLoading(false); return }
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/addresses`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+        if (res.status === 401) {
+          window.dispatchEvent(new CustomEvent('rf:token-expired'))
+          setLoading(false)
+          return
+        }
+        if (!res.ok) throw new Error('not ok')
+        const data = await res.json()
+        setAddresses(Array.isArray(data) ? data : [])
+        setLoading(false)
+        return // success — stop retrying
+      } catch {
+        if (i === delays.length - 1) {
+          // All retries exhausted — leave addresses empty, stop spinner
+          setLoading(false)
+        }
+        // else: keep loading=true and try again after next delay
       }
-      if (!res.ok) return
-      const data = await res.json()
-      setAddresses(Array.isArray(data) ? data : [])
-    } catch { /* network error — stay empty */ }
-    finally { setLoading(false) }
+    }
   }, [])
 
   // Load on mount and whenever user logs in
