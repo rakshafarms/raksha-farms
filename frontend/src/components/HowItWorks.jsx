@@ -49,8 +49,6 @@ export default function HowItWorks() {
 
         {/* Steps */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-          {/* Connector lines (desktop only) — left 1/6 to right 1/6 so dots sit centred on the line */}
-          <div className="hidden md:block absolute top-16 left-[16.67%] right-[16.67%] h-0.5 bg-white/20 z-0" />
 
           {steps.map((s, i) => (
             <div
