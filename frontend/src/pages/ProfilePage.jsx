@@ -200,7 +200,10 @@ export default function ProfilePage() {
   }
 
   const deliveredOrders = orders.filter(o => o.status === 'delivered')
-  const totalSpent      = deliveredOrders.reduce((s, o) => s + o.total, 0)
+  // Spent = all orders except cancelled/rejected (money committed or already paid)
+  const totalSpent      = orders
+    .filter(o => !['cancelled', 'rejected'].includes(o.status))
+    .reduce((s, o) => s + Number(o.total || 0), 0)
   const activeSubs      = mySubs.filter(s => s.is_active).length
 
   const TABS = [

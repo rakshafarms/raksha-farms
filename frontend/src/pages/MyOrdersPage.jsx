@@ -131,7 +131,10 @@ export default function MyOrdersPage() {
   const filtered    = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter)
   const counts      = allOrders.reduce((acc, o) => { acc[o.status] = (acc[o.status] || 0) + 1; return acc }, {})
   const delivered   = counts.delivered || 0
-  const totalSpent  = allOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.total || 0), 0)
+  // Spent = all orders except cancelled/rejected (money committed or already paid)
+  const totalSpent  = allOrders
+    .filter(o => !['cancelled', 'rejected'].includes(o.status))
+    .reduce((s, o) => s + Number(o.total || 0), 0)
 
   // ── Full-page skeleton while initial load ─────────────────────────────
   if (syncing && allOrders.length === 0) {
@@ -215,11 +218,11 @@ export default function MyOrdersPage() {
           </div>
           <div className="card p-3 text-center">
             <p className="text-xl font-black text-emerald-600">{delivered}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Delivered</p>
+            <p className="text-xs text-gray-400 mt-0.5">✓ Delivered</p>
           </div>
           <div className="card p-3 text-center">
             <p className="text-xl font-black text-forest-600">₹{totalSpent.toLocaleString('en-IN')}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Spent</p>
+            <p className="text-xs text-gray-400 mt-0.5">Total Spent</p>
           </div>
         </div>
       )}
