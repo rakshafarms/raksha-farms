@@ -80,10 +80,20 @@ export async function createOrder(req, res) {
       // ── FIX BUG 1: Atomic stock check + deduct in one statement ──────────────
       // SELECT FOR UPDATE locks the row so no concurrent transaction can read
       // stale stock between our check and our update.
-      const { rows: pRows } = await client.query(
+      // Also falls back to name-match so local-dev IDs don't break production orders.
+      let { rows: pRows } = await client.query(
         'SELECT id, name, price, offer_price, stock, unit, variants, is_active FROM products WHERE id=$1 FOR UPDATE',
         [item.id]
       )
+      // Fallback: if ID not found (e.g. local dev IDs vs production DB IDs),
+      // try to locate the product by name so the order still goes through.
+      if (!pRows[0] && item.name) {
+        const fallback = await client.query(
+          'SELECT id, name, price, offer_price, stock, unit, variants, is_active FROM products WHERE LOWER(name)=LOWER($1) AND is_active=true LIMIT 1 FOR UPDATE',
+          [item.name]
+        )
+        pRows = fallback.rows
+      }
       const prod = pRows[0]
 
       if (!prod || !prod.is_active) {
@@ -138,7 +148,8 @@ export async function createOrder(req, res) {
     // Guard: all items were skipped (unavailable / deleted products)
     if (validatedItems.length === 0) {
       await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'None of the items in your cart are currently available. Please update your cart and try again.' })
+      const names = items.map(i => i.name).filter(Boolean).join(', ')
+      return res.status(400).json({ error: `None of the cart items are currently available${names ? ` (${names})` : ''}. Please clear your cart, re-add items from the shop, and try again.` })
     }
 
     // ── Build order ───────────────────────────────────────────────────────────
