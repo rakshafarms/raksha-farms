@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useOrders } from '../context/OrdersContext'
@@ -64,7 +64,7 @@ function FreqPill({ freq }) {
 
 export default function ProfilePage() {
   const { user, logout, isLoggedIn } = useAuth()
-  const { getOrdersByUser, syncOrdersByUser } = useOrders()
+  const { getOrdersByUser, syncOrdersByUser, syncOrdersByPhone } = useOrders()
   const orders = getOrdersByUser(user?.email)
 
   const { wishlist } = useWishlist()
@@ -78,28 +78,35 @@ export default function ProfilePage() {
   const [ordersLoading, setOrdersLoading]     = useState(true)
   const [sessionExpired, setSessionExpired]   = useState(false)
   const [needsReauth, setNeedsReauth]         = useState(false)
+  const didSync = useRef(false)
 
-  // Sync on mount and listen for session-expired / auth-failed events.
+  // Listen for session-expired / auth-failed events
   useEffect(() => {
     function onExpired() { setSessionExpired(true); setOrdersLoading(false) }
     window.addEventListener('rf:session-expired', onExpired)
     window.addEventListener('rf:auth-failed',     onExpired)
+    return () => {
+      window.removeEventListener('rf:session-expired', onExpired)
+      window.removeEventListener('rf:auth-failed',     onExpired)
+    }
+  }, [])
 
-    async function init() {
-      setOrdersLoading(true)
-
+  // Sync orders — identical strategy to MyOrdersPage (mount + 60 s poll)
+  useEffect(() => {
+    async function doSync(isMount = false) {
+      if (isMount) setOrdersLoading(true)
       const token = localStorage.getItem('auth_token')
       if (token) {
-        await syncOrdersByUser().catch(() => {})
-        setOrdersLoading(false)
+        try { await syncOrdersByUser() } catch { /* silent */ }
+        const phone = user?.phone
+        if (phone) { try { await syncOrdersByPhone(phone) } catch { /* silent */ } }
       } else if (user) {
-        // No token — give Google One Tap ~4 s to fire silently.
-        // If it doesn't arrive, auto-redirect to login.
+        // No token yet — give Google One Tap ~4 s then redirect
         let gotToken = false
         for (let i = 0; i < 4; i++) {
           await new Promise(r => setTimeout(r, 1000))
           if (localStorage.getItem('auth_token')) {
-            await syncOrdersByUser().catch(() => {})
+            try { await syncOrdersByUser() } catch { /* silent */ }
             gotToken = true
             break
           }
@@ -109,21 +116,21 @@ export default function ProfilePage() {
           navigate('/login', { state: { from: '/profile' } })
           return
         }
-        setOrdersLoading(false)
-      } else {
-        setOrdersLoading(false)
       }
+      if (isMount) setOrdersLoading(false)
     }
-    init()
 
-    // Hard cap — skeleton never shows longer than 6 s
-    const t = setTimeout(() => setOrdersLoading(false), 6000)
+    // Skeleton cap — never show longer than 6 s
+    const cap = setTimeout(() => setOrdersLoading(false), 6000)
 
-    return () => {
-      clearTimeout(t)
-      window.removeEventListener('rf:session-expired', onExpired)
-      window.removeEventListener('rf:auth-failed',     onExpired)
+    if (!didSync.current) {
+      didSync.current = true
+      doSync(true).finally(() => clearTimeout(cap))
     }
+
+    // Poll every 60 s — same as MyOrdersPage so status updates appear fast
+    const interval = setInterval(() => doSync(false), 60_000)
+    return () => { clearInterval(interval); clearTimeout(cap) }
   }, []) // eslint-disable-line
 
   // Subscriptions
@@ -131,22 +138,35 @@ export default function ProfilePage() {
   const [subsLoading, setSubsLoading] = useState(false)
   const [busySub, setBusySub]         = useState(null)
 
+  // Pre-fetch on mount so tab count is correct before user clicks it
+  useEffect(() => { fetchMySubs() }, []) // eslint-disable-line
+
+  // Re-fetch when user opens the tab (in case they just came back)
   useEffect(() => {
     if (activeTab === 'subscriptions') fetchMySubs()
-  }, [activeTab])
+  }, [activeTab]) // eslint-disable-line
 
   async function fetchMySubs() {
     setSubsLoading(true)
-    try {
-      const token = localStorage.getItem('auth_token')
-      const res = await fetch(`${BACKEND_URL}/api/subscriptions/mine`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) { setMySubs([]); return }
-      const data = await res.json()
-      setMySubs(Array.isArray(data) ? data : [])
-    } catch (e) { console.error(e); setMySubs([]) }
-    finally { setSubsLoading(false) }
+    // Retry up to 3× (0 s / 6 s / 12 s) to survive Render cold-start
+    const delays = [0, 6000, 12000]
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]))
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (!token) { setMySubs([]); setSubsLoading(false); return }
+        const res = await fetch(`${BACKEND_URL}/api/subscriptions/mine`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('not ok')
+        const data = await res.json()
+        setMySubs(Array.isArray(data) ? data : [])
+        setSubsLoading(false)
+        return // success
+      } catch {
+        if (i === delays.length - 1) { setMySubs([]); setSubsLoading(false) }
+      }
+    }
   }
 
   async function toggleSub(id) {
@@ -401,7 +421,7 @@ export default function ProfilePage() {
               <Link to="/" className="btn-primary inline-flex text-sm">Shop Now</Link>
             </div>
           ) : (
-            [...orders].reverse().map(order => (
+            [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(order => (
               <Link key={order.orderId} to={`/track/${order.orderId}`}
                 className="card p-4 flex items-center gap-4 hover:shadow-soft transition-all block">
                 <div className="flex-1 min-w-0">
