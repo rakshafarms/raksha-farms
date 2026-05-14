@@ -14,7 +14,8 @@ const announcements = [
 ]
 
 export default function Navbar() {
-  const { totalItems, openDrawer }  = useCart()
+  const { cart, totalItems, openDrawer }  = useCart()
+  const cartCount = cart.length   // unique product count (not total quantity)
   const { wishlist }                = useWishlist()
   const { user, logout, isLoggedIn } = useAuth()
   const location  = useLocation()
@@ -109,7 +110,17 @@ export default function Navbar() {
               {/* Desktop nav links */}
               <div className="hidden md:flex items-center gap-6">
                 <NavLink to="/" active={location.pathname === '/' && location.hash !== '#categories'}>Shop</NavLink>
-                <NavLink to="/#categories" active={location.hash === '#categories'}>Categories</NavLink>
+                <button
+                  onClick={() => {
+                    if (location.pathname !== '/') {
+                      navigate('/')
+                      setTimeout(() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+                    } else {
+                      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                  }}
+                  className={`text-sm font-semibold transition-colors duration-200 ${location.hash === '#categories' ? 'text-forest-600' : 'text-gray-600 hover:text-forest-500'}`}
+                >Categories</button>
                 <NavLink to="/wishlist" active={location.pathname === '/wishlist'}>
                   Wishlist
                   {wishlist.length > 0 && (
@@ -140,9 +151,9 @@ export default function Navbar() {
                     </svg>
                     <span className="hidden sm:inline">Cart</span>
                   </button>
-                  {totalItems > 0 && (
+                  {cartCount > 0 && (
                     <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[11px] font-black rounded-full min-w-[22px] h-[22px] px-1 flex items-center justify-center ring-2 ring-white shadow-md pointer-events-none">
-                      {totalItems > 99 ? '99+' : totalItems}
+                      {cartCount > 99 ? '99+' : cartCount}
                     </span>
                   )}
                 </div>
