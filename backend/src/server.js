@@ -43,9 +43,11 @@ app.use(cors({
       process.env.CLIENT_URL || 'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:4173',
-      // Always include production domains regardless of env vars
+      // Production domains
       'https://www.rakshafarms.com',
       'https://rakshafarms.com',
+      // Admin panel on Vercel (stable project URL)
+      'https://raksha-farms-vxa5.vercel.app',
     ].filter(Boolean)
     // Allow requests with no origin (mobile apps, Postman, curl)
     if (!origin) return callback(null, true)
