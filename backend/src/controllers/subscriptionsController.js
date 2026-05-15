@@ -403,21 +403,29 @@ export async function createSubscription(req, res) {
     const ids = items.map(it => it.id).filter(Boolean)
     if (ids.length !== items.length) return res.status(400).json({ error: 'Every item must have a valid product id' })
     const { rows: dbProducts } = await query(
-      `SELECT id, price, offer_price, is_active FROM products WHERE id = ANY($1)`, [ids]
+      `SELECT id, name, price, offer_price, is_active FROM products WHERE id = ANY($1)`, [ids]
     )
     const productMap = Object.fromEntries(dbProducts.map(p => [String(p.id), p]))
 
     let pricePerCycle = 0
     const validatedItems = []
     for (const it of items) {
-      const prod = productMap[String(it.id)]
-      if (!prod) return res.status(400).json({ error: `Product ${it.id} not found` })
-      if (!prod.is_active) return res.status(400).json({ error: `"${it.id}" is no longer available` })
+      let prod = productMap[String(it.id)]
+      // Fallback: stale UUID in cart — look up by name instead
+      if (!prod && it.name) {
+        const { rows: fallback } = await query(
+          `SELECT id, name, price, offer_price, is_active FROM products WHERE LOWER(name)=LOWER($1) AND is_active=true LIMIT 1`,
+          [it.name]
+        )
+        prod = fallback[0]
+      }
+      if (!prod) return res.status(400).json({ error: `"${it.name || it.id}" is not available` })
+      if (!prod.is_active) return res.status(400).json({ error: `"${prod.name}" is no longer available` })
       const qty = Math.floor(Number(it.quantity))
-      if (!qty || qty < 1) return res.status(400).json({ error: `Invalid quantity for product ${it.id}` })
+      if (!qty || qty < 1) return res.status(400).json({ error: `Invalid quantity for "${prod.name}"` })
       const unitPrice = prod.offer_price ? Number(prod.offer_price) : Number(prod.price)
       pricePerCycle += unitPrice * qty
-      validatedItems.push({ ...it, price: unitPrice, quantity: qty })
+      validatedItems.push({ ...it, id: prod.id, price: unitPrice, quantity: qty })
     }
 
     const startDate = start_date || new Date().toISOString().split('T')[0]

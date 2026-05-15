@@ -85,8 +85,8 @@ export async function createOrder(req, res) {
         'SELECT id, name, price, offer_price, stock, unit, variants, is_active FROM products WHERE id=$1 FOR UPDATE',
         [item.id]
       )
-      // Fallback: if ID not found (e.g. local dev IDs vs production DB IDs),
-      // try to locate the product by name so the order still goes through.
+      // Fallback: if ID not found (stale localStorage UUID vs production DB UUID),
+      // locate by name so the order still goes through.
       if (!pRows[0] && item.name) {
         const fallback = await client.query(
           'SELECT id, name, price, offer_price, stock, unit, variants, is_active FROM products WHERE LOWER(name)=LOWER($1) AND is_active=true LIMIT 1 FOR UPDATE',
@@ -100,6 +100,9 @@ export async function createOrder(req, res) {
         // Skip products that no longer exist or are inactive — don't fail the whole order
         continue
       }
+
+      // Always use prod.id (the real DB UUID) — item.id may be a stale UUID
+      const prodId = prod.id
 
       // ── FIX BUG 2: Resolve variant price/unit before falling back to base ────
       const variants = Array.isArray(prod.variants)
@@ -123,13 +126,12 @@ export async function createOrder(req, res) {
           : Number(prod.price)
       }
 
-      // ── FIX BUG 1 (continued): Atomic deduct with WHERE stock >= qty ─────────
-      // If stock was already taken by a concurrent order, rowCount === 0 → reject.
+      // ── Atomic stock deduct — use prod.id (real DB UUID), not item.id (may be stale)
       const { rowCount } = await client.query(
         `UPDATE products
          SET stock = stock - $1, updated_at = NOW()
          WHERE id = $2 AND stock >= $1`,
-        [qty, item.id]
+        [qty, prodId]
       )
       if (rowCount === 0) {
         await client.query('ROLLBACK')
@@ -138,11 +140,11 @@ export async function createOrder(req, res) {
 
       await client.query(
         `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'order_placed')`,
-        [item.id, -qty]
+        [prodId, -qty]
       ).catch(() => {})
 
       serverSubtotal += serverPrice * qty
-      validatedItems.push({ ...item, quantity: qty, price: serverPrice, unit: serverUnit })
+      validatedItems.push({ ...item, id: prodId, quantity: qty, price: serverPrice, unit: serverUnit })
     }
 
     // Guard: all items were skipped (unavailable / deleted products)
