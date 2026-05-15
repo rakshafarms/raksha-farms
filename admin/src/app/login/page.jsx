@@ -6,7 +6,7 @@ import { Leaf, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ email: 'admin@rakshafarms.in', password: '' })
+  const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [show, setShow] = useState(false)

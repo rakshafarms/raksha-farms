@@ -102,7 +102,7 @@ export async function getDashboard(req, res) {
     `)
 
     res.json({ stats, stockWarnings, todayList })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin: calendar — subscriptions grouped by delivery date ───────────────────
@@ -151,7 +151,7 @@ export async function getCalendar(req, res) {
     }
 
     res.json({ from, to, calendar: grouped })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin: generate orders for a given date ────────────────────────────────────
@@ -335,7 +335,7 @@ export async function generateOrders(req, res) {
     })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -357,7 +357,7 @@ export async function getSubscriptionDetail(req, res) {
     `, [req.params.id])
 
     res.json({ ...sub[0], history })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin: full update (items, date, status, payment_status, notes) ────────────
@@ -381,7 +381,7 @@ export async function updateSubscriptionAdmin(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Subscription not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin: get all subscriptions ───────────────────────────────────────────────
@@ -389,7 +389,7 @@ export async function getSubscriptions(req, res) {
   try {
     const { rows } = await query(`${BASE_SELECT} ORDER BY s.next_delivery ASC, s.created_at DESC`)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Customer: get own subscriptions ───────────────────────────────────────────
@@ -443,14 +443,14 @@ export async function createSubscription(req, res) {
       notes,
     ])
     res.status(201).json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getMySubscriptions(req, res) {
   try {
     const { rows } = await query(`${BASE_SELECT} WHERE s.user_id=$1 ORDER BY s.created_at DESC`, [req.user.id])
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin: mark delivered — COD collected, payment auto-set to paid ────────────
@@ -526,7 +526,7 @@ export async function markDelivered(req, res) {
     res.json(rows[0])
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -595,7 +595,7 @@ export async function skipDelivery(req, res) {
     res.json(rows[0])
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -611,7 +611,7 @@ export async function toggleMySubscription(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Customer: cancel subscription ─────────────────────────────────────────────
@@ -623,5 +623,5 @@ export async function cancelMySubscription(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

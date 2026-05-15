@@ -155,8 +155,12 @@ export function OrdersProvider({ children }) {
     if (!phone) return
     const digits = phone.replace(/\D/g, '').slice(-10)
     if (digits.length < 8) return
+    const token = localStorage.getItem('auth_token')
+    if (!token) return
     try {
-      const res = await fetch(`${BACKEND_URL}/api/orders/by-phone/${digits}`)
+      const res = await fetch(`${BACKEND_URL}/api/orders/by-phone/${digits}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       if (!res.ok) return
       applyBackendOrders(await res.json())
     } catch { /* silent */ }

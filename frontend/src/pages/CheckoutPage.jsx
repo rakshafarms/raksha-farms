@@ -271,7 +271,7 @@ export default function CheckoutPage() {
         if (Array.isArray(data.items) && data.items.length > 0) order.items = data.items
       } else {
         const errData = await backendRes.json().catch(() => ({}))
-        addToast(`❌ Order failed: ${errData.error || 'Server error'}. Please try again.`, 'error', 7000)
+        addToast(`❌ Order failed: ${errData.error || 'Server error. Please try again.'}`, 'error', 7000)
         setPlacing(false)
         return
       }

@@ -9,7 +9,7 @@ export async function getPlans(req, res) {
       ORDER BY frequency_days ASC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Get all subscription plans (admin - includes inactive)
@@ -20,7 +20,7 @@ export async function getPlansAdmin(req, res) {
       ORDER BY frequency_days ASC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Create subscription plan (admin only)
@@ -39,7 +39,7 @@ export async function createPlan(req, res) {
       [name, frequency, frequency_days || null, base_price || 0, margin_percent || 0, discount_percent || 0, description || '']
     )
     res.status(201).json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Update subscription plan (admin only)
@@ -63,7 +63,7 @@ export async function updatePlan(req, res) {
     }
 
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Delete subscription plan (admin only)
@@ -81,5 +81,5 @@ export async function deletePlan(req, res) {
     }
 
     res.json({ success: true, id })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

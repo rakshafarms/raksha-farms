@@ -148,7 +148,7 @@ export async function getCustomers(req, res) {
       pages:  Math.ceil(parseInt(cntResult.rows[0].count) / lim),
       stats:  statsResult.rows[0],
     })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Orders for a registered user — by user_id OR matching email
@@ -165,7 +165,7 @@ export async function getCustomerOrders(req, res) {
       [req.params.id, email]
     )
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Orders for a guest customer — by phone
@@ -180,7 +180,7 @@ export async function getGuestOrders(req, res) {
       [`%${phone}`]
     )
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function toggleCustomerStatus(req, res) {
@@ -191,5 +191,5 @@ export async function toggleCustomerStatus(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Customer not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

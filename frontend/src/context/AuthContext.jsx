@@ -214,10 +214,16 @@ export function AuthProvider({ children }) {
 
   // ─── Logout ────────────────────────────────────────────────────────
   function logout() {
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      fetch(`${BACKEND_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
     setUser(null)
     localStorage.removeItem('auth_token')
     localStorage.removeItem('rf_auth_user')
-    // Tell cart, wishlist, and orders contexts to clear their local state
     window.dispatchEvent(new CustomEvent('rf:logout'))
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect()

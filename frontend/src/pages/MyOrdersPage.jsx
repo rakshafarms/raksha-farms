@@ -25,8 +25,8 @@ const STATUS_CONFIG = {
   preparing:        { label: 'Preparing',            dot: 'bg-indigo-400',  pill: 'bg-indigo-50 text-indigo-700',   border: 'border-indigo-200' },
   out_for_delivery: { label: 'Out for Delivery 🛵',  dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700',   border: 'border-violet-200' },
   delivered:        { label: 'Delivered ✓',          dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200'},
-  cancelled:        { label: 'Cancelled',            dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500',      border: 'border-gray-200'   },
-  rejected:         { label: 'Rejected',             dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',         border: 'border-red-200'    },
+  cancelled:        { label: 'Cancelled by you',     dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-500',      border: 'border-gray-200'   },
+  rejected:         { label: 'Rejected by Admin',    dot: 'bg-red-400',     pill: 'bg-red-50 text-red-600',         border: 'border-red-200'    },
 }
 
 const FILTER_TABS = [
@@ -36,8 +36,8 @@ const FILTER_TABS = [
   { id: 'preparing',        label: 'Preparing' },
   { id: 'out_for_delivery', label: 'On the way' },
   { id: 'delivered',        label: 'Delivered' },
-  { id: 'cancelled',        label: 'Cancelled' },
-  { id: 'rejected',         label: 'Rejected' },
+  { id: 'cancelled',        label: 'Cancelled by you' },
+  { id: 'rejected',         label: 'Rejected by Admin' },
 ]
 
 export default function MyOrdersPage() {
@@ -365,7 +365,7 @@ function OrderCard({ order }) {
           {(isPartial || hasFullRejection) && (
             <div className={`rounded-xl p-3 border text-sm ${isPartial ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`font-semibold mb-0.5 ${isPartial ? 'text-amber-700' : 'text-red-700'}`}>
-                {isPartial ? '⚠️ Some items were not available' : '❌ Order rejected'}
+                {isPartial ? '⚠️ Some items were not available' : '❌ Order rejected by Admin'}
               </p>
               {rejInfo?.remarks && <p className={`text-xs ${isPartial ? 'text-amber-600' : 'text-red-500'}`}>"{rejInfo.remarks}"</p>}
             </div>

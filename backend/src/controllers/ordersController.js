@@ -314,7 +314,7 @@ export async function createOrder(req, res) {
     res.status(201).json(order)
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -430,7 +430,7 @@ export async function createWalkInOrder(req, res) {
     res.status(201).json({ ...order, discount: discountAmount })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -500,7 +500,7 @@ export async function getOrders(req, res) {
       page:   pg,
       pages:  Math.ceil(parseInt(cntResult.rows[0].count) / lim),
     })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getOrder(req, res) {
@@ -512,7 +512,7 @@ export async function getOrder(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Order not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Run a query inside a SAVEPOINT so a failure rolls back only that step,
@@ -655,7 +655,7 @@ export async function updateOrderStatus(req, res) {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     console.error('updateOrderStatus error:', err)
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally {
     client.release()
   }
@@ -714,25 +714,29 @@ export async function getMyOrders(req, res) {
       [req.user.id]
     )
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getOrdersByPhone(req, res) {
   try {
-    const phone = req.params.phone.replace(/\D/g, '').slice(-10)
-    if (phone.length !== 10) return res.status(400).json({ error: 'Invalid phone' })
+    const requested = req.params.phone.replace(/\D/g, '').slice(-10)
+    if (requested.length !== 10) return res.status(400).json({ error: 'Invalid phone' })
+    // Fetch the logged-in user's actual phone from DB — JWT payload doesn't include it
+    const { rows: userRows } = await query('SELECT phone FROM users WHERE id = $1', [req.user.id])
+    const userPhone = (userRows[0]?.phone || '').replace(/\D/g, '').slice(-10)
+    if (!userPhone || userPhone !== requested) return res.status(403).json({ error: 'Access denied' })
     const { rows } = await query(
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
               items, address, notes, created_at, updated_at
        FROM orders
-       WHERE address->>'phone' LIKE $1
+       WHERE RIGHT(REGEXP_REPLACE(address->>'phone','\\D','','g'),10) = $1
          AND created_at > NOW() - INTERVAL '90 days'
        ORDER BY created_at DESC
        LIMIT 50`,
-      [`%${phone}`]
+      [userPhone]
     )
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function trackOrder(req, res) {
@@ -750,7 +754,7 @@ export async function trackOrder(req, res) {
       if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
     }
     res.json({ id: rows[0].id, status: rows[0].status, updatedAt: rows[0].updated_at })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function trackOrderByRef(req, res) {
@@ -761,7 +765,7 @@ export async function trackOrderByRef(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Order not found' })
     res.json({ id: rows[0].id, status: rows[0].status, updatedAt: rows[0].updated_at })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getOrderStats(req, res) {
@@ -779,5 +783,5 @@ export async function getOrderStats(req, res) {
             = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
     `)
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

@@ -81,6 +81,28 @@ export default function AdminLayout({ children, title }) {
     })
   }
 
+  // Idle timeout — log out after 30 minutes of inactivity
+  useEffect(() => {
+    if (!user) return
+    const IDLE_MS = 30 * 60 * 1000
+    let timer
+    function resetTimer() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        fetch('/api/set-token', { method: 'DELETE' }).catch(() => {})
+        localStorage.removeItem('admin_token')
+        window.location.href = '/login'
+      }, IDLE_MS)
+    }
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }))
+    resetTimer()
+    return () => {
+      clearTimeout(timer)
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+    }
+  }, [user])
+
   // Poll orders every 30s
   const fetchOrders = useCallback(async () => {
     try {
@@ -114,10 +136,8 @@ export default function AdminLayout({ children, title }) {
 
   useEffect(() => {
     if (!user || typeof EventSource === 'undefined') return
-    // EventSource can't send custom headers, so pass the JWT as a query param.
-    // The backend adminSecret middleware accepts ?token= as a fallback.
-    const sseToken = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token') || Cookies.get('admin_token') || ''
-    const source = new EventSource(ordersAPI.eventsUrl(sseToken))
+    // withCredentials sends the admin_token cookie automatically — no token in URL
+    const source = new EventSource(ordersAPI.eventsUrl(), { withCredentials: true })
 
     source.addEventListener('order_created', (event) => {
       try {

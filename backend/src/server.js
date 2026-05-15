@@ -30,7 +30,12 @@ const app = express()
 const PORT = process.env.PORT || 4000
 
 // Security
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  frameguard: { action: 'deny' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  xContentTypeOptions: true,
+}))
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -46,10 +51,8 @@ app.use(cors({
     if (!origin) return callback(null, true)
     // Exact match against the explicit list
     if (allowed.includes(origin)) return callback(null, true)
-    // Allow any Netlify, Vercel, or Render subdomain (preview deployments)
-    if (/\.(netlify\.app|vercel\.app|onrender\.com)$/.test(origin)) return callback(null, true)
-    // Allow any subdomain of rakshafarms.com
-    if (/^https?:\/\/([a-z0-9-]+\.)?rakshafarms\.com$/.test(origin)) return callback(null, true)
+    // Allow any subdomain of rakshafarms.com (admin panel, etc.)
+    if (/^https:\/\/([a-z0-9-]+\.)?rakshafarms\.com$/.test(origin)) return callback(null, true)
     return callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
@@ -57,6 +60,8 @@ app.use(cors({
 
 // Rate limiting
 app.use('/api/auth', rateLimit({ windowMs: 15*60*1000, max: 20, message: 'Too many requests' }))
+app.use('/api/coupons/validate', rateLimit({ windowMs: 60*1000, max: 5, message: 'Too many requests' }))
+app.use('/api/orders/by-phone', rateLimit({ windowMs: 60*1000, max: 5, message: 'Too many requests' }))
 app.use('/api', rateLimit({ windowMs: 60*1000, max: 200 }))
 
 // Body parsing
@@ -83,14 +88,8 @@ app.use('/api/wishlist',           wishlistRoutes)
 app.use('/api/settings',          settingsRoutes)
 app.use('/api/payments',          paymentsRoutes)
 
-// Health check — includes build date so we can confirm Render deployed latest code
-app.get('/health', (req, res) => res.json({
-  status:    'ok',
-  env:       process.env.NODE_ENV,
-  version:   '2026-05-13-v27',   // bump this on every deploy to verify new code is live
-  features:  ['orders', 'order-tracking', 'google-auth', 'cross-device-sync', 'partial-rejection', 'low-stock-alerts', 'subscriptions', 'stock-deduction', 'soft-delete', 'admin-product-filters', 'subscription-dashboard', 'delivery-calendar', 'generate-orders', 'stock-warnings', 'payment-tracking', 'safe-json-parse', 'archived-order-block', 'order-number', 'saved-addresses-api', 'cart-sync-on-login'],
-  database:  process.env.DATABASE_URL ? 'configured' : 'not-configured',
-}))
+// Health check
+app.get('/health', (req, res) => res.json({ status: 'ok' }))
 
 // Test endpoint to verify API is working
 app.get('/api/test', (req, res) => res.json({ message: 'API is working!', timestamp: new Date().toISOString() }))
@@ -99,7 +98,7 @@ app.get('/api/test', (req, res) => res.json({ message: 'API is working!', timest
 // Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack)
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' })
+  res.status(err.status || 500).json({ error: 'Something went wrong' })
 })
 
 // Start server immediately so Render doesn't time out waiting for DB

@@ -32,7 +32,7 @@ r.get('/events', adminSecret, (req, res) => {
 })
 r.get('/', adminSecret, getOrders)
 r.get('/stats', adminSecret, getOrderStats)
-r.get('/by-phone/:phone', getOrdersByPhone)           // Sync all orders by phone (no auth)
+r.get('/by-phone/:phone', verifyToken, getOrdersByPhone) // Sync orders by phone — requires login
 r.get('/track/:id', optionalAuth, trackOrder)         // Poll by DB UUID
 r.get('/track-ref/:ref', trackOrderByRef)             // Poll by RF-... reference ID (no auth)
 r.get('/:id', adminSecret, getOrder)

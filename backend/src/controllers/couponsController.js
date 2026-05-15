@@ -22,7 +22,7 @@ export async function getCoupons(req, res) {
       FROM coupons ORDER BY created_at DESC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 /* ── Public: available coupons for the current user (hides codes only if private) ── */
@@ -38,7 +38,7 @@ export async function getAvailableCoupons(req, res) {
       ORDER BY value DESC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 /* ── Admin: create ── */
@@ -62,7 +62,7 @@ export async function createCoupon(req, res) {
     res.status(201).json(rows[0])
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Coupon code already exists' })
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }
 
@@ -88,7 +88,7 @@ export async function updateCoupon(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Coupon not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 /* ── Admin: toggle active ── */
@@ -100,7 +100,7 @@ export async function toggleCoupon(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Coupon not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 /* ── Admin: delete ── */
@@ -108,7 +108,7 @@ export async function deleteCoupon(req, res) {
   try {
     await query('DELETE FROM coupons WHERE id=$1', [req.params.id])
     res.json({ message: 'Coupon deleted' })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 /* ── Public: validate coupon ── */
@@ -151,5 +151,5 @@ export async function validateCoupon(req, res) {
 
     const discount = calcDiscount(coupon, order_total)
     res.json({ valid: true, discount, coupon })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

@@ -13,7 +13,7 @@ export async function POST(request) {
     res.cookies.set('admin_token', token, {
       maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
       path: '/',
-      sameSite: 'lax',
+      sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
       httpOnly: false, // must be readable by js-cookie for client-side API requests
     })

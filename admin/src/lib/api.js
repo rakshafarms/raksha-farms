@@ -53,13 +53,9 @@ export const ordersAPI = {
   updateStatus: (id, status, extras = {}) => api.patch(`/orders/${id}/status`, { status, ...extras }),
   getStats: () => api.get('/orders/stats'),
   createWalkIn: (data) => api.post('/orders/walkin', data),
-  // EventSource can't send Authorization headers, so we pass the token as a
-  // query param. The backend adminSecret middleware accepts it as a fallback.
-  eventsUrl: (token) => {
-    const base = `${API_BASE_URL}/orders/events`
-    if (!token) return base
-    return `${base}?token=${encodeURIComponent(token)}`
-  },
+  // EventSource uses withCredentials so the admin_token cookie is sent automatically.
+  // No token in the URL — backend reads it from the cookie (getCookie in adminSecret middleware).
+  eventsUrl: () => `${API_BASE_URL}/orders/events`,
 }
 
 // ── Analytics ─────────────────────────────────────────

@@ -115,7 +115,7 @@ export async function getDashboardStats(req, res) {
       recentOrders:    recentOrders.rows,
       statusBreakdown: statusBreakdown.rows,
     })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getSalesAnalytics(req, res) {
@@ -134,7 +134,7 @@ export async function getSalesAnalytics(req, res) {
       GROUP BY d.date ORDER BY d.date ASC
     `, [period])
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getCategoryRevenue(req, res) {
@@ -156,7 +156,7 @@ export async function getCategoryRevenue(req, res) {
       GROUP BY p.category ORDER BY revenue DESC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getOrderStatusBreakdown(req, res) {
@@ -167,5 +167,5 @@ export async function getOrderStatusBreakdown(req, res) {
       FROM orders GROUP BY status ORDER BY count DESC
     `)
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

@@ -32,7 +32,7 @@ export async function getDeliverySettings(req, res) {
     const settings = { ...DEFAULTS }
     for (const r of rows) settings[r.key] = parseFloat(r.value)
     res.json(settings)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function updateDeliverySettings(req, res) {
@@ -60,6 +60,6 @@ export async function updateDeliverySettings(req, res) {
     res.json({ ok: true })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   } finally { client.release() }
 }

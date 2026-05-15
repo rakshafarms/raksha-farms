@@ -6,7 +6,7 @@ export async function getProducts(req, res) {
     const { category, search, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const params = []
-    let where = 'WHERE is_active=true'
+    let where = 'WHERE is_active=true AND stock > 0'
     if (category) { params.push(category);       where += ` AND category=$${params.length}` }
     if (search)   { params.push(`%${search}%`);  where += ` AND (name ILIKE $${params.length} OR category ILIKE $${params.length})` }
 
@@ -16,7 +16,7 @@ export async function getProducts(req, res) {
     )
     const cnt = await query(`SELECT COUNT(*) FROM products ${where}`, params)
     res.json({ products: rows, total: parseInt(cnt.rows[0].count), page: parseInt(page), limit: parseInt(limit) })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // ── Admin-facing: all products with optional status/category filter ────────────
@@ -42,7 +42,7 @@ export async function getProductsAdmin(req, res) {
     )
     const cnt = await query(`SELECT COUNT(*) FROM products ${where}`, params)
     res.json({ products: rows, total: parseInt(cnt.rows[0].count), page: parseInt(page), limit: parseInt(limit) })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getProduct(req, res) {
@@ -50,7 +50,7 @@ export async function getProduct(req, res) {
     const { rows } = await query('SELECT * FROM products WHERE id=$1', [req.params.id])
     if (!rows[0]) return res.status(404).json({ error: 'Product not found' })
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Helper: extract uploaded file URLs.
@@ -107,7 +107,7 @@ export async function createProduct(req, res) {
        image_url || null, JSON.stringify(parsedVars), JSON.stringify(imagesArr), is_featured || false]
     )
     res.status(201).json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function updateProduct(req, res) {
@@ -157,7 +157,7 @@ export async function updateProduct(req, res) {
       [...vals, req.params.id]
     )
     res.json(rows[0])
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Soft delete (archive) — preserves order history
@@ -169,7 +169,7 @@ export async function deleteProduct(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Product not found' })
     res.json({ message: `Product "${rows[0].name}" archived`, id: rows[0].id })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 // Hard delete — admin explicit action
@@ -178,7 +178,7 @@ export async function hardDeleteProduct(req, res) {
     const { rows } = await query('DELETE FROM products WHERE id=$1 RETURNING id', [req.params.id])
     if (!rows[0]) return res.status(404).json({ error: 'Product not found' })
     res.json({ message: 'Product permanently deleted' })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function updateStock(req, res) {
@@ -193,7 +193,7 @@ export async function updateStock(req, res) {
     await query('INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,$3)',
       [req.params.id, change, reason || 'Manual update']).catch(() => {})
     res.json({ message: 'Stock updated', stock: stockNum })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function getLowStock(req, res) {
@@ -204,5 +204,5 @@ export async function getLowStock(req, res) {
       [threshold]
     )
     res.json(rows)
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

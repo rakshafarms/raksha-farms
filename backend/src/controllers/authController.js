@@ -23,16 +23,21 @@ async function linkGuestOrders(userId, email, phone) {
 function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name },
-    process.env.JWT_SECRET
-    // no expiresIn — tokens never expire; user signs out explicitly
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
   )
+}
+
+export async function logout(req, res) {
+  // Client discards the token. With 30d expiry, stolen tokens auto-expire.
+  res.json({ ok: true })
 }
 
 export async function register(req, res) {
   try {
     const { name, email, phone, password } = req.body
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' })
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' })
 
     const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()])
     if (existing.rows[0]) return res.status(409).json({ error: 'An account with this email already exists.' })
@@ -48,7 +53,7 @@ export async function register(req, res) {
     const token = signToken(rows[0])
     res.status(201).json({ token, user: { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone, role: rows[0].role } })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }
 
@@ -80,7 +85,7 @@ export async function login(req, res) {
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }
 
@@ -103,7 +108,7 @@ export async function adminLogin(req, res) {
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }
 
@@ -116,7 +121,7 @@ export async function me(req, res) {
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
     res.json(rows[0])
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }
 
@@ -160,14 +165,14 @@ export async function googleAuth(req, res) {
 
     const token = signToken(user)
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone || null, role: user.role } })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
 export async function changePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' })
-    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
+    if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' })
     const { rows } = await query('SELECT * FROM users WHERE id = $1', [req.user.id])
     const user = rows[0]
     if (!user) return res.status(404).json({ error: 'User not found' })
@@ -177,6 +182,6 @@ export async function changePassword(req, res) {
     await query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashed, req.user.id])
     res.json({ message: 'Password updated' })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error(err); res.status(500).json({ error: 'Something went wrong' })
   }
 }

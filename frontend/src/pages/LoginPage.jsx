@@ -53,7 +53,7 @@ export default function LoginPage() {
     else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = 'Enter a valid email'
     if (form.phone && form.phone.replace(/\D/g, '').length !== 10) errs.phone = 'Enter a valid 10-digit mobile number'
     if (!form.password) errs.password = 'Password is required'
-    else if (form.password.length < 6) errs.password = 'Minimum 6 characters'
+    else if (form.password.length < 8) errs.password = 'Minimum 8 characters'
     if (form.password !== form.confirm) errs.confirm = 'Passwords do not match'
     return errs
   }
@@ -184,7 +184,7 @@ export default function LoginPage() {
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base pointer-events-none">🔒</span>
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder={tab === 'signup' ? 'Minimum 6 characters' : 'Your password'}
+                  placeholder={tab === 'signup' ? 'Minimum 8 characters' : 'Your password'}
                   value={form.password}
                   onChange={(e) => update('password', e.target.value)}
                   className={`input-field pl-10 pr-10 ${errors.password ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
