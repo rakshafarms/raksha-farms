@@ -50,6 +50,7 @@ export default function CheckoutPage() {
   const [subStartDate, setSubStartDate] = useState(tomorrow())
   const [subQty, setSubQty]             = useState(1)
   const [placing, setPlacing] = useState(false)
+  const [placingMsg, setPlacingMsg] = useState('Place Order')
 
   const orderType = subMode === 'Buy Once' ? 'onetime' : 'subscription'
 
@@ -246,39 +247,47 @@ export default function CheckoutPage() {
     }
 
     let backendId = null
-    try {
-      const headers = { 'Content-Type': 'application/json' }
-      const token = localStorage.getItem('auth_token')
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const backendRes = await fetch(`${BACKEND_URL}/api/orders`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          customer, items, subtotal: totalPrice, deliveryFee: slotFee,
-          total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label,
-          coupon_code: couponApplied?.code || null,
-          ...(paymentId ? { payment_id: paymentId, payment_status: 'paid' } : {}),
-        }),
-      })
-      if (backendRes.ok) {
-        const data = await backendRes.json()
-        backendId = data.id || null
-        if (data.reference_id) { orderId = data.reference_id; order.orderId = data.reference_id }
-        else if (data.id)      { orderId = String(data.id);   order.orderId = String(data.id) }
-        order.total       = data.total        != null ? Number(data.total)        : order.total
-        order.subtotal    = data.subtotal     != null ? Number(data.subtotal)     : order.subtotal
-        order.deliveryFee = data.delivery_fee != null ? Number(data.delivery_fee) : order.deliveryFee
-        if (Array.isArray(data.items) && data.items.length > 0) order.items = data.items
-      } else {
-        const errData = await backendRes.json().catch(() => ({}))
-        addToast(`❌ Order failed: ${errData.error || 'Server error. Please try again.'}`, 'error', 7000)
-        setPlacing(false)
-        return
+    const orderBody = JSON.stringify({
+      customer, items, subtotal: totalPrice, deliveryFee: slotFee,
+      total: finalTotal, paymentMethod, deliverySlot: activeSlot?.label,
+      coupon_code: couponApplied?.code || null,
+      ...(paymentId ? { payment_id: paymentId, payment_status: 'paid' } : {}),
+    })
+    const delays = [0, 8000, 16000]
+    let backendRes = null
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > 0) {
+        setPlacingMsg('Connecting… please wait')
+        await new Promise(r => setTimeout(r, delays[attempt]))
       }
-    } catch {
-      addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
-      setPlacing(false)
-      return
+      try {
+        const headers = { 'Content-Type': 'application/json' }
+        const token = localStorage.getItem('auth_token')
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        backendRes = await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers, body: orderBody })
+        break
+      } catch {
+        if (attempt === 0) addToast('⏳ Server is starting up, retrying…', 'info', 10000)
+        if (attempt === delays.length - 1) {
+          addToast('❌ Cannot reach server. Check your internet and try again.', 'error', 7000)
+          setPlacing(false); setPlacingMsg('Place Order'); return
+        }
+      }
+    }
+    setPlacingMsg('Place Order')
+    if (backendRes && backendRes.ok) {
+      const data = await backendRes.json()
+      backendId = data.id || null
+      if (data.reference_id) { orderId = data.reference_id; order.orderId = data.reference_id }
+      else if (data.id)      { orderId = String(data.id);   order.orderId = String(data.id) }
+      order.total       = data.total        != null ? Number(data.total)        : order.total
+      order.subtotal    = data.subtotal     != null ? Number(data.subtotal)     : order.subtotal
+      order.deliveryFee = data.delivery_fee != null ? Number(data.delivery_fee) : order.deliveryFee
+      if (Array.isArray(data.items) && data.items.length > 0) order.items = data.items
+    } else if (backendRes) {
+      const errData = await backendRes.json().catch(() => ({}))
+      addToast(`❌ Order failed: ${errData.error || 'Server error. Please try again.'}`, 'error', 7000)
+      setPlacing(false); return
     }
 
     // Save address if not already stored
@@ -923,7 +932,7 @@ export default function CheckoutPage() {
                       Pay ₹{finalTotal}
                     </>
                   ) : (
-                    <>Place Order ₹{finalTotal}</>
+                    <>{placingMsg === 'Place Order' ? `Place Order ₹${finalTotal}` : placingMsg}</>
                   )}
                 </button>
               </div>
