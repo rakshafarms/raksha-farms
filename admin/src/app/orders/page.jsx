@@ -255,6 +255,7 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
   const addr     = parseAddr(o)
   const notes    = parseNotes(o)
   const partial  = notes && o.status === 'accepted'
+  // Once an order reaches any of these statuses the status dropdown is hidden — no further changes allowed
   const isFinal  = ['out_for_delivery','delivered','cancelled','rejected'].includes(o.status)
   const walkIn   = isWalkIn(o)
   const phone    = addr.phone || o.customer_phone || ''
