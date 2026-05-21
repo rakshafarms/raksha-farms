@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 export default function Footer() {
   return (
-    <footer className="bg-green-950 text-green-100 pb-20 md:pb-0">
+    <footer className="bg-green-950 text-green-100 md:pb-0 pb-[calc(6rem+env(safe-area-inset-bottom))]">
       {/* Top wave */}
       <div className="bg-white">
         <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full block">

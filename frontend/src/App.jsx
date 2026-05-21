@@ -56,7 +56,8 @@ export default function App() {
                     <Navbar />
                     <CartDrawer />
                     <ToastContainer />
-                    <main className="flex-1 pb-20 md:pb-0">
+                    {/* Bottom padding clears: 64px nav + 20px protruding cart button + iPhone home-indicator safe area */}
+                    <main className="flex-1 md:pb-0 pb-[calc(6rem+env(safe-area-inset-bottom))]">
                       <Routes>
                         <Route path="/"              element={<HomePage />} />
                         <Route path="/product/:id"   element={<ProductPage />} />
