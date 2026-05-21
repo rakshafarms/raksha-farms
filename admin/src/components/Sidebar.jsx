@@ -27,12 +27,18 @@ export default function Sidebar({ mobileOpen = true, onClose, collapsed = false,
   const path = usePathname()
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
-  function doLogout() {
+  async function doLogout() {
     // Clear cookie via server-side route (reliable — js-cookie removal can miss
-    // cookies set with attributes that differ from client defaults)
-    fetch('/api/set-token', { method: 'DELETE' }).catch(() => {})
+    // cookies set with attributes that differ from client defaults).
+    // Await so the Set-Cookie response is processed BEFORE we navigate away.
+    try {
+      await fetch('/api/set-token', { method: 'DELETE', cache: 'no-store' })
+    } catch { /* ignore — we still want to clear local state and redirect */ }
     localStorage.removeItem('admin_token')
-    window.location.href = '/login'
+    sessionStorage.removeItem('admin_token')
+    // Use location.replace so the admin page is NOT in the browser history —
+    // clicking Back on the login page will not return to the cached admin page.
+    window.location.replace('/login')
   }
 
   function handleLinkClick() {

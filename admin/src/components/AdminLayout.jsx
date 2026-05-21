@@ -52,18 +52,52 @@ export default function AdminLayout({ children, title }) {
         const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
         const payload = JSON.parse(atob(b64))
         if (!payload?.id) return false
+        // Reject expired JWTs — the server would reject them anyway, but checking
+        // here also stops a stale token from rendering the layout for a split second.
+        if (payload.exp && Date.now() / 1000 > payload.exp) return false
         setUser(payload)
         return true
       } catch { return false }
     }
 
+    // ── Hard-redirect helper that bypasses bfcache ──────────────────────────
+    // window.location.replace() alone is restored from bfcache when the user
+    // hits Back, defeating the redirect. Setting location.href forces a fresh
+    // navigation that the browser won't put in bfcache.
+    function redirectToLogin() {
+      // Clear in-memory state first so React unmounts the admin UI immediately
+      setUser(null)
+      window.location.replace('/login')
+    }
+
     // First attempt
-    if (tryAuth(getToken())) return
+    if (tryAuth(getToken())) {
+      // Re-validate every time the page becomes visible OR is restored from
+      // bfcache (back/forward cache). Without this, clicking the browser Back
+      // button after logout restores the rendered admin page from memory,
+      // exposing admin data even though the token is gone.
+      const recheck = (e) => {
+        if (!tryAuth(getToken())) {
+          // Token disappeared (logout in another tab, expiry, cookie cleared)
+          redirectToLogin()
+        }
+      }
+      window.addEventListener('pageshow', recheck)         // fires on bfcache restore
+      window.addEventListener('visibilitychange', recheck) // fires when tab regains focus
+      window.addEventListener('focus', recheck)            // fires on window focus
+      window.addEventListener('storage', recheck)          // fires when another tab logs out
+      return () => {
+        window.removeEventListener('pageshow', recheck)
+        window.removeEventListener('visibilitychange', recheck)
+        window.removeEventListener('focus', recheck)
+        window.removeEventListener('storage', recheck)
+      }
+    }
 
     // Second attempt after 300ms — handles any browser storage async quirks
     const timer = setTimeout(() => {
       if (!tryAuth(getToken())) {
-        window.location.replace('/login')
+        redirectToLogin()
       }
     }, 300)
     return () => clearTimeout(timer)
