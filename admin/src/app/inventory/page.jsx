@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
+import BulkImportModal from '../../components/BulkImportModal'
 import { productsAPI, categoriesAPI } from '../../lib/api'
-import { AlertTriangle, Package, Search, Printer, Download } from 'lucide-react'
+import { AlertTriangle, Package, Search, Printer, Download, FileSpreadsheet } from 'lucide-react'
 
 const FALLBACK_CATEGORIES = [
   { slug:'vegetables', name:'Vegetables' },{ slug:'fruits', name:'Fruits' },
@@ -24,6 +25,7 @@ export default function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [search, setSearch] = useState('')
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   function fetchAll() {
     setLoading(true); setLoadError(false)
@@ -274,7 +276,15 @@ export default function InventoryPage() {
             <h2 className="font-semibold text-gray-800">Stock Levels</h2>
             <span className="text-xs text-gray-400">{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setBulkOpen(true)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-40 text-amber-800 text-sm font-semibold rounded-xl transition-colors"
+              title="Download → edit in Excel → upload back to bulk update inventory"
+            >
+              <FileSpreadsheet size={14}/> Bulk Update
+            </button>
             <button
               onClick={downloadCSV}
               disabled={loading || filtered.length === 0}
@@ -369,6 +379,14 @@ export default function InventoryPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Bulk import / update modal — download .xlsx, edit, upload back */}
+      <BulkImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        products={products}
+        onImported={fetchAll}
+      />
     </AdminLayout>
   )
 }

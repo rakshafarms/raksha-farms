@@ -1,4 +1,8 @@
 import { query } from '../config/database.js'
+import pool from '../config/database.js'
+import fs from 'fs/promises'
+import path from 'path'
+import { randomUUID } from 'crypto'
 
 // ── Customer-facing: active products only ─────────────────────────────────────
 export async function getProducts(req, res) {
@@ -205,4 +209,201 @@ export async function getLowStock(req, res) {
     )
     res.json(rows)
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk import from Excel / CSV
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Accepts a JSON array of rows from an Excel/CSV uploaded by the admin.
+// Each row may contain: id, name, category, description, price, offer_price,
+// stock, unit, image_url, gallery_urls, is_active, is_featured.
+//
+// Matching strategy:
+//   1. If `id` is provided AND matches an existing product → UPDATE that row
+//   2. Else if `name` matches an existing active product (case-insensitive) → UPDATE
+//   3. Else → INSERT a new product (requires at minimum: name, category, price, stock)
+//
+// Images:
+//   - If `image_url` starts with http(s):// → backend downloads and saves locally,
+//     replacing the URL with the local /uploads/... path
+//   - If it starts with /uploads/ → kept as-is (already a local image)
+//   - If empty/missing → kept as-is on UPDATE, set to null on INSERT
+//   - Same logic for each comma-separated entry in `gallery_urls`
+//
+// Returns: { updated: N, created: N, skipped: [...], errors: [...] }
+// ────────────────────────────────────────────────────────────────────────────
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')
+
+// Download a remote image to /uploads and return its public path (or null on failure).
+async function downloadImage(url) {
+  if (!url || typeof url !== 'string') return null
+  const trimmed = url.trim()
+  if (!trimmed) return null
+  // Already a local upload — keep as-is
+  if (trimmed.startsWith('/uploads/')) return trimmed
+  // Not http(s)? Reject — we don't trust other protocols
+  if (!/^https?:\/\//i.test(trimmed)) return null
+  try {
+    const response = await fetch(trimmed, { redirect: 'follow' })
+    if (!response.ok) return null
+    const ct = response.headers.get('content-type') || ''
+    if (!ct.startsWith('image/')) return null
+    const ext = ct.split('/')[1].split(';')[0].replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg'
+    const buf = Buffer.from(await response.arrayBuffer())
+    // Guard against oversized images (5 MB cap)
+    if (buf.length > 5 * 1024 * 1024) return null
+    await fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(() => {})
+    const filename = `bulk-${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
+    await fs.writeFile(path.join(UPLOAD_DIR, filename), buf)
+    return `/uploads/${filename}`
+  } catch (err) {
+    console.warn('downloadImage failed for', trimmed, '—', err.message)
+    return null
+  }
+}
+
+// Coerce a cell value to a number, returning null for blank/invalid.
+function num(v) {
+  if (v === undefined || v === null || v === '') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+
+// Coerce a cell value to a boolean.
+function bool(v, fallback = true) {
+  if (v === undefined || v === null || v === '') return fallback
+  if (typeof v === 'boolean') return v
+  const s = String(v).trim().toLowerCase()
+  if (['true', '1', 'yes', 'y', 'active'].includes(s)) return true
+  if (['false', '0', 'no', 'n', 'inactive'].includes(s)) return false
+  return fallback
+}
+
+export async function bulkImportProducts(req, res) {
+  const client = await pool.connect()
+  let rowIdx = 0
+  try {
+    const rows = req.body?.rows
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No rows provided' })
+    }
+    if (rows.length > 1000) {
+      return res.status(400).json({ error: 'Maximum 1000 rows per upload' })
+    }
+
+    const summary = { updated: 0, created: 0, skipped: [], errors: [] }
+    await client.query('BEGIN')
+
+    for (let i = 0; i < rows.length; i++) {
+      rowIdx = i + 2 // +2 because row 1 is the header in Excel
+      const row = rows[i] || {}
+      try {
+        const id           = String(row.id || '').trim() || null
+        const name         = String(row.name || '').trim()
+        const category     = String(row.category || '').trim()
+        const description  = row.description != null ? String(row.description) : null
+        const price        = num(row.price)
+        const offer_price  = num(row.offer_price)
+        const stock        = row.stock != null && row.stock !== '' ? Math.floor(Number(row.stock)) : null
+        const unit         = row.unit != null ? String(row.unit).trim() : null
+        const imageUrlRaw  = row.image_url != null ? String(row.image_url).trim() : ''
+        const galleryRaw   = row.gallery_urls != null ? String(row.gallery_urls).trim() : ''
+        const isActive     = bool(row.is_active, true)
+        const isFeatured   = bool(row.is_featured, false)
+
+        // ── Locate existing product (ID first, then name fallback) ───────
+        let existing = null
+        if (id) {
+          const r1 = await client.query('SELECT * FROM products WHERE id=$1', [id])
+          existing = r1.rows[0] || null
+        }
+        if (!existing && name) {
+          const r2 = await client.query('SELECT * FROM products WHERE LOWER(name)=LOWER($1) LIMIT 1', [name])
+          existing = r2.rows[0] || null
+        }
+
+        // ── Process image URLs (download remote, keep local) ─────────────
+        const newCoverPath = imageUrlRaw ? await downloadImage(imageUrlRaw) : null
+        const galleryItems = galleryRaw
+          ? galleryRaw.split(',').map(s => s.trim()).filter(Boolean)
+          : []
+        const newGalleryPaths = []
+        for (const g of galleryItems) {
+          const p = await downloadImage(g)
+          if (p) newGalleryPaths.push(p)
+        }
+
+        if (existing) {
+          // ── UPDATE ─────────────────────────────────────────────────────
+          // For each editable column, keep existing value if the cell is blank.
+          const finalName        = name || existing.name
+          const finalCategory    = category || existing.category
+          const finalDescription = description !== null ? description : existing.description
+          const finalPrice       = price !== null ? price : existing.price
+          const finalOfferPrice  = offer_price !== null ? offer_price : existing.offer_price
+          const finalStock       = stock !== null ? stock : existing.stock
+          const finalUnit        = unit !== null ? unit : existing.unit
+          // Image: only replace if a new URL was provided AND downloaded successfully
+          const finalCover       = imageUrlRaw ? (newCoverPath || existing.image_url) : existing.image_url
+          // Gallery: only replace if at least one new URL was provided
+          const finalGallery     = galleryItems.length > 0
+            ? JSON.stringify(newGalleryPaths)
+            : existing.images
+          // is_active / is_featured: only apply if cell is non-blank
+          const finalActive      = row.is_active   !== undefined && row.is_active   !== '' ? isActive   : existing.is_active
+          const finalFeatured    = row.is_featured !== undefined && row.is_featured !== '' ? isFeatured : existing.is_featured
+
+          const prevStock = Number(existing.stock || 0)
+
+          await client.query(
+            `UPDATE products SET
+                name=$1, category=$2, description=$3, price=$4, offer_price=$5,
+                stock=$6, unit=$7, image_url=$8, images=$9, is_active=$10, is_featured=$11,
+                updated_at=NOW()
+             WHERE id=$12`,
+            [finalName, finalCategory, finalDescription, finalPrice, finalOfferPrice,
+             finalStock, finalUnit, finalCover, finalGallery, finalActive, finalFeatured,
+             existing.id]
+          )
+
+          // Log stock change if it changed
+          if (finalStock !== prevStock) {
+            await client.query(
+              `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1, $2, 'bulk_import')`,
+              [existing.id, finalStock - prevStock]
+            ).catch(() => {})
+          }
+          summary.updated++
+        } else {
+          // ── INSERT (new product) ───────────────────────────────────────
+          if (!name || !category || price === null || stock === null) {
+            summary.skipped.push({ row: rowIdx, name, reason: 'New product requires name, category, price, and stock' })
+            continue
+          }
+          await client.query(
+            `INSERT INTO products
+                (name, category, description, price, offer_price, stock, unit,
+                 image_url, images, is_active, is_featured)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [name, category, description, price, offer_price, stock, unit,
+             newCoverPath, JSON.stringify(newGalleryPaths), isActive, isFeatured]
+          )
+          summary.created++
+        }
+      } catch (err) {
+        summary.errors.push({ row: rowIdx, name: row.name || '', error: err.message })
+      }
+    }
+
+    await client.query('COMMIT')
+    res.json(summary)
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('bulkImportProducts failed at row', rowIdx, '—', err)
+    res.status(500).json({ error: 'Something went wrong' })
+  } finally {
+    client.release()
+  }
 }

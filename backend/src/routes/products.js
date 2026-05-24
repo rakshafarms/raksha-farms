@@ -2,7 +2,7 @@ import { Router } from 'express'
 import {
   getProducts, getProductsAdmin, getProduct,
   createProduct, updateProduct, deleteProduct, hardDeleteProduct,
-  updateStock, getLowStock
+  updateStock, getLowStock, bulkImportProducts
 } from '../controllers/productsController.js'
 import { adminOnly } from '../middleware/auth.js'
 import { uploadProductImages } from '../middleware/upload.js'
@@ -19,6 +19,7 @@ r.get('/:id',             getProduct)
 r.post('/',               ...adminOnly, uploadProductImages, createProduct)
 r.put('/:id',             ...adminOnly, uploadProductImages, updateProduct)
 r.patch('/:id/stock',     ...adminOnly, updateStock)
+r.post('/bulk-import',    ...adminOnly, bulkImportProducts)    // Excel/CSV bulk update + create
 r.delete('/:id',          ...adminOnly, deleteProduct)         // soft delete (archive)
 r.delete('/:id/hard',     ...adminOnly, hardDeleteProduct)     // permanent delete
 

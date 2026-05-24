@@ -44,6 +44,8 @@ export const productsAPI = {
   hardDelete: (id) => api.delete(`/products/${id}/hard`),               // permanent delete
   updateStock: (id, stock, reason) => api.patch(`/products/${id}/stock`, { stock, reason }),
   getLowStock: (threshold) => api.get('/products/low-stock', { params: { threshold } }),
+  // Bulk import — longer timeout because the backend may download remote images one-by-one
+  bulkImport: (rows) => api.post('/products/bulk-import', { rows }, { timeout: 180000 }),
 }
 
 // ── Orders ────────────────────────────────────────────

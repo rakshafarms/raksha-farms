@@ -1,8 +1,9 @@
 'use client'
 import React, { useEffect, useRef, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
+import BulkImportModal from '../../components/BulkImportModal'
 import { productsAPI, categoriesAPI } from '../../lib/api'
-import { Plus, Pencil, Archive, Search, X, RotateCcw, Package, Trash2, ImagePlus } from 'lucide-react'
+import { Plus, Pencil, Archive, Search, X, RotateCcw, Package, Trash2, ImagePlus, FileSpreadsheet } from 'lucide-react'
 
 function useAdminToast() {
   const [toast, setToast] = React.useState(null)
@@ -49,6 +50,7 @@ export default function ProductsPage() {
   const [pendingArchive, setPendingArchive]       = useState(null)
   const [pendingHardDelete, setPendingHardDelete] = useState(null)
   const [newGalleryImages, setNewGalleryImages]   = useState([]) // File[]
+  const [bulkOpen, setBulkOpen]                   = useState(false)
   const prevSearch = useRef('')
 
   // Increment refreshKey to force a reload after mutations (save/archive/delete)
@@ -206,6 +208,14 @@ export default function ProductsPage() {
           <option value="">All Categories</option>
           {categories.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}
         </select>
+
+        <button
+          onClick={() => setBulkOpen(true)}
+          className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-xl text-sm font-medium transition"
+          title="Download → edit in Excel → upload back to bulk update products"
+        >
+          <FileSpreadsheet size={16}/> Bulk Update
+        </button>
 
         <button onClick={openAdd}
           className="flex items-center gap-2 bg-[#1B4332] text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-[#163826] transition">
@@ -572,6 +582,14 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk import / update via Excel */}
+      <BulkImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        products={products}
+        onImported={load}
+      />
     </AdminLayout>
   )
 }
