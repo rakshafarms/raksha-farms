@@ -25,20 +25,26 @@ import { productsAPI } from '../lib/api'
 //   6. Modal displays the summary; admin closes and the parent reloads.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Column order matches what the backend reads in bulkImportProducts.
+// Columns are ordered for ADMIN convenience — what they edit most goes first.
+// The backend reads by column NAME (not position) in bulkImportProducts, so
+// the visual order here is purely a UX choice.
+// `id` is hidden at the far right with a narrow width — admin never needs to
+// read or touch it; it just helps the backend match each row to the right
+// existing product. If `id` is missing/blank, the backend falls back to a
+// name match.
 const COLUMNS = [
-  'id',           // Don't edit — used to match the row back to the existing product
-  'name',
+  'name',         // ← Admin sees this first when they open the file
   'category',
-  'description',
+  'stock',
   'price',
   'offer_price',
-  'stock',
   'unit',
+  'description',
   'image_url',    // http(s) URL → backend downloads; or /uploads/... to keep current
   'gallery_urls', // Comma-separated http(s) URLs or /uploads/... paths
   'is_active',    // true/false (defaults to true on new rows)
   'is_featured',  // true/false (defaults to false on new rows)
+  'id',           // Far right, hidden — DO NOT EDIT
 ]
 
 export default function BulkImportModal({ open, onClose, products, onImported }) {
@@ -72,21 +78,27 @@ export default function BulkImportModal({ open, onClose, products, onImported })
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(data, { header: COLUMNS })
-    // Reasonable column widths so the file isn't unreadable when opened
+    // Widths match the new column order. `id` is hidden (`hidden: true`) +
+    // very narrow (wch:4) — Excel/Numbers will keep the data but not show
+    // the ugly UUID. Admins can still un-hide the column from the View menu
+    // if they ever need to inspect it.
     worksheet['!cols'] = [
-      { wch: 38 }, // id
-      { wch: 28 }, // name
-      { wch: 18 }, // category
-      { wch: 40 }, // description
-      { wch: 10 }, // price
-      { wch: 12 }, // offer_price
-      { wch: 8 },  // stock
-      { wch: 10 }, // unit
-      { wch: 40 }, // image_url
-      { wch: 60 }, // gallery_urls
-      { wch: 10 }, // is_active
-      { wch: 12 }, // is_featured
+      { wch: 30 },                  // name
+      { wch: 18 },                  // category
+      { wch: 8  },                  // stock
+      { wch: 10 },                  // price
+      { wch: 12 },                  // offer_price
+      { wch: 10 },                  // unit
+      { wch: 45 },                  // description
+      { wch: 45 },                  // image_url
+      { wch: 60 },                  // gallery_urls
+      { wch: 10 },                  // is_active
+      { wch: 12 },                  // is_featured
+      { wch: 4, hidden: true },     // id  (hidden — leave alone!)
     ]
+    // Freeze the header row so column titles stay visible while scrolling
+    worksheet['!freeze'] = { xSplit: 0, ySplit: 1 }
+    worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }]
 
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory')
@@ -95,15 +107,17 @@ export default function BulkImportModal({ open, onClose, products, onImported })
     const instructions = [
       ['Raksha Farms — Bulk Inventory Update Instructions'],
       [],
-      ['1. Edit any cell EXCEPT the "id" column. The id is how we match your row back to the existing product.'],
-      ['2. Leave the "id" column blank on a new row to CREATE a new product. New products need at minimum: name, category, price, stock.'],
-      ['3. Delete a row to LEAVE that product unchanged in the database. (Deletion does NOT archive — it just opts out of the update.)'],
-      ['4. For images, paste a public http(s) URL into image_url or gallery_urls — the system will download and store the image. To keep the current image, leave the cell as-is.'],
+      ['Edit any column you see (Name, Category, Stock, Price, etc.). Save and upload back.'],
+      [],
+      ['1. The "id" column is HIDDEN at the far right — don\'t worry about it. It\'s only there so the system can match each row to the right product. Leave it alone.'],
+      ['2. To CREATE a new product, just add a new row at the bottom with the name, category, price and stock filled in. (You don\'t need to fill the id — it stays blank for new rows.)'],
+      ['3. To LEAVE a product unchanged, just delete its row from the file. Anything not in the file is left alone in the database — nothing gets auto-deleted.'],
+      ['4. For images, paste a public http(s) URL into image_url or gallery_urls — the system will download and store the image. To keep the current image, leave the cell empty.'],
       ['5. gallery_urls is comma-separated. Example: https://site.com/a.jpg, https://site.com/b.jpg'],
       ['6. is_active and is_featured accept: true / false / yes / no / 1 / 0.'],
-      ['7. Save the file and upload it back via the "Upload Excel" button.'],
+      ['7. Save the file and upload it back via the "Upload Excel" button in the admin panel.'],
       [],
-      ['Maximum 1000 rows per upload. The whole upload runs in a database transaction — if any row fails, ALL changes are rolled back.'],
+      ['Maximum 1000 rows per upload. The whole upload runs in one database transaction — if any row fails, ALL changes are rolled back, so you never end up with a half-updated catalogue.'],
     ]
     const instSheet = XLSX.utils.aoa_to_sheet(instructions)
     instSheet['!cols'] = [{ wch: 140 }]
@@ -209,7 +223,7 @@ export default function BulkImportModal({ open, onClose, products, onImported })
             <>
               <ol className="text-sm text-gray-600 space-y-2 mb-5">
                 <li className="flex gap-2"><span className="font-bold text-[#1B4332]">1.</span> Click <strong>Download Template</strong> to get the current inventory as Excel.</li>
-                <li className="flex gap-2"><span className="font-bold text-[#1B4332]">2.</span> Edit any cell except the <code className="text-xs bg-gray-100 px-1 rounded">id</code> column. Add new rows at the bottom to create new products.</li>
+                <li className="flex gap-2"><span className="font-bold text-[#1B4332]">2.</span> Edit any column you see — Name, Category, Stock, Price, etc. Add new rows at the bottom to create new products.</li>
                 <li className="flex gap-2"><span className="font-bold text-[#1B4332]">3.</span> Save and upload below. Up to 1000 rows per file.</li>
               </ol>
 
