@@ -378,16 +378,29 @@ export async function bulkImportProducts(req, res) {
           summary.updated++
         } else {
           // ── INSERT (new product) ───────────────────────────────────────
-          if (!name || !category || price === null || stock === null) {
-            summary.skipped.push({ row: rowIdx, name, reason: 'New product requires name, category, price, and stock' })
+          // Only name, category, and price are strictly required.
+          // Stock defaults to 0 if missing — admin can update it via the
+          // Inventory page or another bulk upload. Forgetting the stock cell
+          // shouldn't block product creation.
+          const missing = []
+          if (!name)           missing.push('name')
+          if (!category)       missing.push('category')
+          if (price === null)  missing.push('price')
+          if (missing.length) {
+            summary.skipped.push({
+              row: rowIdx,
+              name,
+              reason: `Missing required field${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
+            })
             continue
           }
+          const finalStock = stock !== null ? stock : 0
           await client.query(
             `INSERT INTO products
                 (name, category, description, price, offer_price, stock, unit,
                  image_url, images, is_active, is_featured)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-            [name, category, description, price, offer_price, stock, unit,
+            [name, category, description, price, offer_price, finalStock, unit,
              newCoverPath, JSON.stringify(newGalleryPaths), isActive, isFeatured]
           )
           summary.created++
