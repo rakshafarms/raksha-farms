@@ -193,3 +193,87 @@ export async function toggleCustomerStatus(req, res) {
     res.json(rows[0])
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lightweight customer autocomplete for the Billing / POS page.
+//
+// GET /api/customers/search?q=...&limit=8
+//
+// Searches BOTH registered users (`users` table) AND guest customers
+// (anyone whose phone appears on a guest order) so the admin can autofill
+// any existing customer — not just registered ones. Returns a slim payload
+// (id, name, phone, email) so the dropdown is snappy.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function searchCustomers(req, res) {
+  try {
+    const raw = String(req.query.q || '').trim()
+    const lim = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 8))
+    if (raw.length < 2) return res.json([])   // need at least 2 chars to avoid huge result sets
+
+    const like = `%${raw}%`
+    // Digits-only version of the query — used for phone matching so "98765"
+    // matches "+91 98765 43210" the same as "9876543210"
+    const digits = raw.replace(/\D/g, '')
+
+    // Registered users — search across name / email / phone
+    const usersSql = `
+      SELECT u.id::text AS id,
+             u.name,
+             COALESCE(NULLIF(u.phone,''), '') AS phone,
+             u.email,
+             'user' AS source
+      FROM users u
+      WHERE u.role = 'user' AND u.is_active = true
+        AND (
+          u.name  ILIKE $1
+          OR u.email ILIKE $1
+          OR ($2 != '' AND RIGHT(REGEXP_REPLACE(COALESCE(u.phone,''),'\\D','','g'),10) ILIKE '%' || $2 || '%')
+        )
+      ORDER BY u.updated_at DESC NULLS LAST
+      LIMIT $3
+    `
+    const { rows: userRows } = await query(usersSql, [like, digits, lim])
+
+    // Guest customers — distinct (name, phone) pairs from orders not linked to a user.
+    // We dedupe by digits-only phone so the same person doesn't appear twice with
+    // different phone formats. We also only return guests whose phone isn't already
+    // in the users list (otherwise they'd be a duplicate of a registered user).
+    const guestsSql = `
+      SELECT DISTINCT ON (digits_phone)
+        NULL::text AS id,
+        COALESCE(NULLIF(o.address->>'name',''), 'Guest') AS name,
+        o.address->>'phone' AS phone,
+        COALESCE(o.address->>'email','') AS email,
+        'guest' AS source,
+        RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10) AS digits_phone,
+        MAX(o.created_at) OVER (PARTITION BY RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10)) AS last_order
+      FROM orders o
+      WHERE o.user_id IS NULL
+        AND o.address->>'phone' IS NOT NULL
+        AND o.address->>'phone' != ''
+        AND (
+          (o.address->>'name')  ILIKE $1
+          OR (o.address->>'phone') ILIKE $1
+          OR (o.address->>'email') ILIKE $1
+          OR ($2 != '' AND RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10) ILIKE '%' || $2 || '%')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM users u2
+          WHERE u2.phone IS NOT NULL AND u2.phone != ''
+            AND RIGHT(REGEXP_REPLACE(u2.phone,'\\D','','g'),10)
+                = RIGHT(REGEXP_REPLACE(o.address->>'phone','\\D','','g'),10)
+        )
+      ORDER BY digits_phone, last_order DESC NULLS LAST
+      LIMIT $3
+    `
+    const { rows: guestRows } = await query(guestsSql, [like, digits, lim])
+
+    // Merge — registered users first, then guests up to the limit
+    const merged = [...userRows, ...guestRows]
+      .filter(r => r.name || r.phone)
+      .slice(0, lim)
+      .map(r => ({ id: r.id, name: r.name, phone: r.phone, email: r.email, source: r.source }))
+
+    res.json(merged)
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
+}

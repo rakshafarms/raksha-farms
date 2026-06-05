@@ -1,11 +1,11 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
-import { productsAPI, ordersAPI, API_BASE_URL } from '../../lib/api'
+import { productsAPI, ordersAPI, customersAPI, API_BASE_URL } from '../../lib/api'
 import {
   Search, Plus, Minus, Trash2, Printer, ShoppingBag,
   User, Phone, IndianRupee, Tag, CheckCircle2, X,
-  StickyNote, Zap
+  StickyNote, Zap, UserCheck
 } from 'lucide-react'
 
 const PAY = [
@@ -46,6 +46,20 @@ export default function BillingPage() {
   const [submitting,    setSubmitting]    = useState(false)
   const [error,         setError]         = useState('')
   const [receipt,       setReceipt]       = useState(null)
+
+  // ── Customer lookup (autocomplete) ─────────────────────────────────────────
+  // As admin types in the phone OR name field, hit /customers/search and show
+  // a dropdown of matching customers (both registered users and guests).
+  // Clicking a result autofills name + phone — no more retyping for repeat
+  // customers.
+  const [lookupResults, setLookupResults] = useState([])
+  const [lookupOpen,    setLookupOpen]    = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  // Which input has focus — controls which field's value drives the search
+  const [lookupField,   setLookupField]   = useState(null) // 'name' | 'phone' | null
+  // Tracks whether the user just picked a result, to suppress the next search
+  // (otherwise filling the field would re-trigger a search for the picked text).
+  const justPickedRef = useRef(false)
 
   // Load active products
   useEffect(() => {
@@ -103,6 +117,36 @@ export default function BillingPage() {
   function resetBill() {
     setCart([]); setCustomerName(''); setCustomerPhone('')
     setDiscount(''); setNotes(''); setPayMethod('cash'); setError('')
+    setLookupResults([]); setLookupOpen(false); setLookupField(null)
+  }
+
+  // Debounced customer search — fires 250ms after the admin stops typing in
+  // either the name or phone field. Uses whichever field is focused as the
+  // query so the dropdown shows the most relevant results.
+  useEffect(() => {
+    if (justPickedRef.current) { justPickedRef.current = false; return }
+    const q = (lookupField === 'phone' ? customerPhone : customerName).trim()
+    if (q.length < 2) { setLookupResults([]); setLookupOpen(false); return }
+    setLookupLoading(true)
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await customersAPI.search(q, 8)
+        setLookupResults(Array.isArray(data) ? data : [])
+        setLookupOpen(true)
+      } catch { /* silent — search failure shouldn't block billing */ }
+      finally { setLookupLoading(false) }
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerName, customerPhone, lookupField])
+
+  function pickCustomer(c) {
+    justPickedRef.current = true
+    setCustomerName(c.name || '')
+    setCustomerPhone(c.phone || '')
+    setLookupResults([])
+    setLookupOpen(false)
+    setLookupField(null)
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -364,18 +408,46 @@ export default function BillingPage() {
 
           {/* ── Customer ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 flex-shrink-0">
-            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-              <User size={15} className="text-[#1B4332]"/> Customer Details
-            </h3>
-            <input value={customerName} onChange={e => setCustomerName(e.target.value)}
-              placeholder="Customer name *"
-              className="w-full px-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                <User size={15} className="text-[#1B4332]"/> Customer Details
+              </h3>
+              <span className="text-[10px] text-gray-400 italic">Type to search existing</span>
+            </div>
+
+            {/* Name field — also triggers customer autocomplete */}
+            <div className="relative">
+              <input
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
+                onFocus={() => setLookupField('name')}
+                // Delay closing so a click on a dropdown row registers first
+                onBlur={() => setTimeout(() => setLookupOpen(false), 200)}
+                placeholder="Customer name *"
+                className="w-full px-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
+              />
+              {lookupField === 'name' && lookupOpen && (
+                <CustomerDropdown results={lookupResults} loading={lookupLoading} onPick={pickCustomer} />
+              )}
+            </div>
+
+            {/* Phone field — also triggers customer autocomplete */}
             <div className="relative">
               <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-                placeholder="Phone number (optional)" type="tel"
-                className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
+              <input
+                value={customerPhone}
+                onChange={e => setCustomerPhone(e.target.value)}
+                onFocus={() => setLookupField('phone')}
+                onBlur={() => setTimeout(() => setLookupOpen(false), 200)}
+                placeholder="Phone number (optional)"
+                type="tel"
+                className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
+              />
+              {lookupField === 'phone' && lookupOpen && (
+                <CustomerDropdown results={lookupResults} loading={lookupLoading} onPick={pickCustomer} />
+              )}
             </div>
+
             <div className="relative">
               <StickyNote size={14} className="absolute left-3 top-3.5 text-gray-400"/>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
@@ -524,5 +596,63 @@ export default function BillingPage() {
         </div>
       </div>
     </AdminLayout>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CustomerDropdown
+// Shown beneath the name / phone inputs while the admin is searching for an
+// existing customer. Clicking a row autofills both fields via onPick.
+// Uses onMouseDown (not onClick) so the click registers BEFORE the input's
+// onBlur fires and closes the dropdown.
+// ─────────────────────────────────────────────────────────────────────────────
+function CustomerDropdown({ results, loading, onPick }) {
+  return (
+    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+      {loading && results.length === 0 && (
+        <div className="px-3 py-2.5 text-xs text-gray-400 flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-[#1B4332] border-t-transparent rounded-full animate-spin"/>
+          Searching customers…
+        </div>
+      )}
+      {!loading && results.length === 0 && (
+        <div className="px-3 py-2.5 text-xs text-gray-400">
+          No matching customer — fill in the details to bill as a new one.
+        </div>
+      )}
+      {results.length > 0 && (
+        <ul className="max-h-60 overflow-y-auto divide-y divide-gray-50">
+          {results.map((c, i) => (
+            <li key={`${c.source}-${c.id || c.phone || i}`}>
+              <button
+                type="button"
+                onMouseDown={() => onPick(c)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-emerald-50 text-left transition-colors"
+              >
+                <div className="w-8 h-8 bg-[#1B4332] rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">
+                    {(c.name || '?')[0].toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{c.name || 'Guest'}</p>
+                    {c.source === 'guest' && (
+                      <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">Guest</span>
+                    )}
+                    {c.source === 'user' && (
+                      <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Member</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 truncate">
+                    {c.phone || c.email || 'no contact info'}
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

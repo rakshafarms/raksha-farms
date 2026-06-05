@@ -73,6 +73,8 @@ export const customersAPI = {
   getOrders: (id) => api.get(`/customers/${id}/orders`),
   getGuestOrders: (phone) => api.get(`/customers/guest/${encodeURIComponent(phone)}/orders`),
   toggle: (id) => api.patch(`/customers/${id}/toggle`),
+  // Lightweight autocomplete used by the Billing / POS page
+  search: (q, limit = 8) => api.get('/customers/search', { params: { q, limit } }),
 }
 
 // ── Coupons ───────────────────────────────────────────
