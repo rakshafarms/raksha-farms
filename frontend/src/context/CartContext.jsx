@@ -34,8 +34,19 @@ export function CartProvider({ children }) {
   // For guests: read from localStorage as fallback
   const [cart, setCart] = useState(() => {
     if (getToken()) return []   // logged in → wait for DB load
-    try { return JSON.parse(localStorage.getItem('rf_cart') || '[]') }
-    catch { return [] }
+    try {
+      const raw = JSON.parse(localStorage.getItem('rf_cart') || '[]')
+      // Inline normalise — duplicates `normalizeCartItem` because that helper
+      // is defined later in this component. Keeps stale guest cart entries
+      // (saved before the variant fix) from showing the wrong unit.
+      return Array.isArray(raw) ? raw.map(item => {
+        const v = item?.selectedVariant
+        if (v && v.label && (item.unit !== v.label || Number(item.price) !== Number(v.price))) {
+          return { ...item, unit: v.label, price: v.price }
+        }
+        return item
+      }) : []
+    } catch { return [] }
   })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const saveTimer = useRef(null)
@@ -58,18 +69,32 @@ export function CartProvider({ children }) {
     return () => { document.body.style.overflow = '' }
   }, [drawerOpen])
 
+  // Normalise any cart item whose displayed `unit` got out of sync with its
+  // `selectedVariant.label`. This fixes legacy cart rows saved before the
+  // variant fix, where unit was incorrectly set to the base product unit
+  // (e.g. "1kg") even though a smaller variant was picked.
+  function normalizeCartItem(item) {
+    if (!item || typeof item !== 'object') return item
+    const v = item.selectedVariant
+    if (v && v.label && (item.unit !== v.label || Number(item.price) !== Number(v.price))) {
+      return { ...item, unit: v.label, price: v.price }
+    }
+    return item
+  }
+
   // Merge backend cart into local state
   async function mergeBackendCart() {
     const backendItems = await loadCartFromBackend()
     // Mark as synced regardless of result so saves can proceed after this point
     hasSyncedFromBackend.current = true
     if (!Array.isArray(backendItems)) return
+    const normalized = backendItems.map(normalizeCartItem)
     setCart(prev => {
-      if (!backendItems.length) return prev  // backend empty — keep local guest items
+      if (!normalized.length) return prev.map(normalizeCartItem)  // backend empty — keep local guest items
       // Backend takes priority; local-only items appended
-      const merged = [...backendItems]
+      const merged = [...normalized]
       prev.forEach(local => {
-        if (!merged.find(b => b.cartKey === local.cartKey)) merged.push(local)
+        if (!merged.find(b => b.cartKey === local.cartKey)) merged.push(normalizeCartItem(local))
       })
       return merged
     })
@@ -106,15 +131,36 @@ export function CartProvider({ children }) {
     setCart(prev => {
       const existing = prev.find(item => item.cartKey === key)
       if (existing) {
+        // Always refresh unit/price/selectedVariant on existing items too —
+        // protects against stale cart entries saved before the variant fix,
+        // where unit might still be the base product unit (e.g. "1kg") even
+        // though the user picked a smaller variant.
         return prev.map(item =>
           item.cartKey === key
-            ? { ...item, quantity: Math.min(item.quantity + safeQty, stock) }
+            ? {
+                ...item,
+                quantity: Math.min(item.quantity + safeQty, stock),
+                price: selectedVariant ? selectedVariant.price : product.price,
+                unit:  selectedVariant ? selectedVariant.label : product.unit,
+                selectedVariant,
+              }
             : item
         )
       }
-      const price = selectedVariant ? selectedVariant.price : product.price
-      const unit  = selectedVariant ? selectedVariant.label : product.unit
-      return [...prev, { ...product, cartKey: key, quantity: Math.min(safeQty, stock), price, unit, selectedVariant }]
+      // ── Build new cart item with EXPLICIT unit/price assignment ────────────
+      // We spread `product` first, then explicitly overwrite price + unit
+      // last so a stray `unit` field on `product` can never leak through.
+      const variantUnit  = selectedVariant ? selectedVariant.label : product.unit
+      const variantPrice = selectedVariant ? selectedVariant.price : product.price
+      const newItem = {
+        ...product,
+        cartKey: key,
+        quantity: Math.min(safeQty, stock),
+        selectedVariant,
+      }
+      newItem.price = variantPrice
+      newItem.unit  = variantUnit
+      return [...prev, newItem]
     })
     window.dispatchEvent(new CustomEvent('rf:cart-bump', {
       detail: { image: product.image, name: product.name },
