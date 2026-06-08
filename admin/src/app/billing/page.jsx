@@ -121,12 +121,8 @@ export default function BillingPage() {
 
   function handleProductClick(p) {
     if (Number(p.stock) <= 0) return
-    const variants = parseVariants(p)
-    if (variants.length > 0) {
-      setVariantPicker({ product: p, variants })
-    } else {
-      addToCartDirect(p)
-    }
+    // Always open the picker — shows pre-configured variants + custom amount row
+    setVariantPicker({ product: p, variants: parseVariants(p) })
   }
 
   const changeQty    = (key, d) => setCart(prev =>
@@ -326,39 +322,17 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Variant picker sheet */}
       {variantPicker && (
-        <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
-          onClick={() => setVariantPicker(null)}>
-          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <p className="font-bold text-gray-900 text-sm">{variantPicker.product.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Select quantity / variant</p>
-              </div>
-              <button onClick={() => setVariantPicker(null)} className="p-1.5 hover:bg-gray-100 rounded-xl">
-                <X size={16}/>
-              </button>
-            </div>
-            <div className="p-4 grid grid-cols-2 gap-2.5 max-h-72 overflow-y-auto">
-              {variantPicker.variants.map(v => {
-                const alreadyQty = cart.find(i => i.cartKey === `${variantPicker.product.id}|${v.label}`)?.qty || 0
-                return (
-                  <button key={v.label}
-                    onClick={() => { addToCartDirect(variantPicker.product, v); setVariantPicker(null) }}
-                    className="flex flex-col items-start p-3 rounded-xl border-2 border-gray-100 hover:border-[#1B4332] hover:bg-emerald-50 transition-all text-left relative">
-                    {alreadyQty > 0 && (
-                      <span className="absolute top-2 right-2 w-5 h-5 bg-[#1B4332] text-white text-[10px] font-black rounded-full flex items-center justify-center">{alreadyQty}</span>
-                    )}
-                    <span className="text-sm font-bold text-gray-800">{v.label}</span>
-                    <span className="text-base font-black text-[#1B4332] mt-0.5">{fmtRs(v.price)}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+        <VariantPicker
+          product={variantPicker.product}
+          variants={variantPicker.variants}
+          cart={cart}
+          onClose={() => setVariantPicker(null)}
+          onAdd={(label, price) => {
+            addToCartDirect(variantPicker.product, { label, price })
+            setVariantPicker(null)
+          }}
+        />
       )}
 
       <div className="flex gap-4 h-[calc(100vh-130px)] overflow-hidden">
@@ -671,6 +645,120 @@ export default function BillingPage() {
 // Uses onMouseDown (not onClick) so the click registers BEFORE the input's
 // onBlur fires and closes the dropdown.
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Variant / quantity picker sheet ──────────────────────────────────────────
+// Opens for every product. Shows pre-configured variants (quick-tap) at the top
+// plus a custom amount row (unit chips + free price entry) so admin can sell
+// any weight/volume even if no variants are configured on the product.
+const UNIT_CHIPS = ['100g','250g','500g','1kg','2kg','200mL','500mL','1L','pcs']
+
+function VariantPicker({ product, variants, cart, onClose, onAdd }) {
+  const basePrice = product.offer_price && Number(product.offer_price) > 0
+    ? Number(product.offer_price) : Number(product.price)
+
+  const [customUnit,  setCustomUnit]  = useState(product.unit || '250g')
+  const [customPrice, setCustomPrice] = useState(String(basePrice))
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center"
+      onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <p className="font-bold text-gray-900">{product.name}</p>
+            <p className="text-xs text-gray-400 mt-0.5">Choose quantity to add to bill</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl"><X size={16}/></button>
+        </div>
+
+        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Pre-configured variants */}
+          {variants.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Quick select</p>
+              <div className="grid grid-cols-2 gap-2">
+                {variants.map(v => {
+                  const inCartQty = cart.find(i => i.cartKey === `${product.id}|${v.label}`)?.qty || 0
+                  return (
+                    <button key={v.label}
+                      onClick={() => onAdd(v.label, Number(v.price))}
+                      className="relative flex flex-col items-start p-3 rounded-xl border-2 border-gray-100 hover:border-[#1B4332] hover:bg-emerald-50 transition-all text-left">
+                      {inCartQty > 0 && (
+                        <span className="absolute top-2 right-2 w-5 h-5 bg-[#1B4332] text-white text-[10px] font-black rounded-full flex items-center justify-center">{inCartQty}</span>
+                      )}
+                      <span className="text-sm font-bold text-gray-800">{v.label}</span>
+                      <span className="text-base font-black text-[#1B4332]">{fmtRs(v.price)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Custom amount */}
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+              {variants.length > 0 ? 'Or custom amount' : 'Select quantity'}
+            </p>
+
+            {/* Unit chips */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {UNIT_CHIPS.map(u => (
+                <button key={u} onClick={() => setCustomUnit(u)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all
+                    ${customUnit === u
+                      ? 'bg-[#1B4332] text-white border-[#1B4332]'
+                      : 'border-gray-200 text-gray-600 hover:border-[#1B4332]'}`}>
+                  {u}
+                </button>
+              ))}
+              {/* Free-type field for custom unit like "300g" or "750mL" */}
+              <input
+                value={UNIT_CHIPS.includes(customUnit) ? '' : customUnit}
+                onChange={e => setCustomUnit(e.target.value)}
+                placeholder="other…"
+                className={`w-20 px-2 py-1.5 rounded-lg text-xs border-2 focus:outline-none transition-all
+                  ${!UNIT_CHIPS.includes(customUnit)
+                    ? 'border-[#1B4332] text-[#1B4332] font-bold'
+                    : 'border-gray-200 text-gray-400'}`}
+              />
+            </div>
+
+            {/* Price row */}
+            <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-3">
+              <span className="text-sm text-gray-500 font-medium">Price ₹</span>
+              <input
+                type="number" value={customPrice}
+                onChange={e => setCustomPrice(e.target.value)}
+                className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
+                min={0} step={0.5}
+              />
+              <span className="text-xs text-gray-400">per {customUnit || 'unit'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Add button */}
+        <div className="px-4 pb-5 pt-2">
+          <button
+            onClick={() => {
+              const p = parseFloat(customPrice) || 0
+              if (!customUnit.trim() || p <= 0) return
+              onAdd(customUnit.trim(), p)
+            }}
+            disabled={!customUnit.trim() || !(parseFloat(customPrice) > 0)}
+            className="w-full py-3.5 bg-[#1B4332] hover:bg-[#163826] disabled:opacity-40 text-white rounded-2xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+            <Plus size={16}/>
+            Add {customUnit || 'unit'} — {fmtRs(parseFloat(customPrice) || 0)}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CustomerDropdown({ results, loading, onPick }) {
   return (
     <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
