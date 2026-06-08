@@ -30,12 +30,24 @@ const imgSrc = (url) => {
   return url   // /images/... resolved against admin's own domain
 }
 
+// Parse variants from a product (JSONB may come as string or array)
+function parseVariants(p) {
+  try {
+    const v = Array.isArray(p.variants) ? p.variants
+      : typeof p.variants === 'string' ? JSON.parse(p.variants || '[]') : []
+    return v.filter(x => x && x.label && Number(x.price) > 0)
+  } catch { return [] }
+}
+
 export default function BillingPage() {
   const [products,   setProducts]   = useState([])
   const [loading,    setLoading]    = useState(true)
   const [search,     setSearch]     = useState('')
   const [cat,        setCat]        = useState('All')
   const [categories, setCategories] = useState(['All'])
+
+  // Variant picker: { product, variants[] } or null
+  const [variantPicker, setVariantPicker] = useState(null)
 
   const [cart,          setCart]          = useState([])
   const [customerName,  setCustomerName]  = useState('')
@@ -89,35 +101,50 @@ export default function BillingPage() {
   const total     = Math.max(0, subtotal - discAmt)
 
   // ── Cart helpers ──────────────────────────────────────────────────────────
-  function addToCart(p) {
+  // cartKey = "productId|variantLabel" (or just "productId" for no-variant items)
+  function addToCartDirect(p, variant = null) {
     if (Number(p.stock) <= 0) return
+    const price = variant
+      ? Number(variant.price)
+      : (p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price))
+    const unit  = variant ? variant.label : (p.unit || '')
+    const cartKey = variant ? `${p.id}|${variant.label}` : p.id
     setCart(prev => {
-      const ex = prev.find(i => i.id === p.id)
+      const ex = prev.find(i => i.cartKey === cartKey)
       if (ex) {
-        if (ex.qty >= Number(p.stock)) return prev   // respect stock
-        return prev.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i)
+        if (ex.qty >= Number(p.stock)) return prev
+        return prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + 1 } : i)
       }
-      const price = p.offer_price && Number(p.offer_price) > 0
-        ? Number(p.offer_price) : Number(p.price)
-      return [...prev, { id: p.id, name: p.name, unit: p.unit, price, qty: 1, stock: Number(p.stock), image: imgSrc(p.image_url) }]
+      return [...prev, { cartKey, id: p.id, name: p.name, unit, price, qty: 1, stock: Number(p.stock), image: imgSrc(p.image_url) }]
     })
   }
 
-  const changeQty  = (id, d) => setCart(prev =>
-    prev.map(i => i.id === id ? { ...i, qty: Math.max(1, Math.min(i.qty + d, i.stock)) } : i)
+  function handleProductClick(p) {
+    if (Number(p.stock) <= 0) return
+    const variants = parseVariants(p)
+    if (variants.length > 0) {
+      setVariantPicker({ product: p, variants })
+    } else {
+      addToCartDirect(p)
+    }
+  }
+
+  const changeQty    = (key, d) => setCart(prev =>
+    prev.map(i => i.cartKey === key ? { ...i, qty: Math.max(1, Math.min(i.qty + d, i.stock)) } : i)
   )
-  const setItemQty = (id, v) => setCart(prev =>
-    prev.map(i => i.id === id ? { ...i, qty: Math.max(1, Math.min(parseInt(v) || 1, i.stock)) } : i)
+  const setItemQty   = (key, v) => setCart(prev =>
+    prev.map(i => i.cartKey === key ? { ...i, qty: Math.max(1, Math.min(parseInt(v) || 1, i.stock)) } : i)
   )
-  const setItemPrice = (id, v) => setCart(prev =>
-    prev.map(i => i.id === id ? { ...i, price: Math.max(0, parseFloat(v) || 0) } : i)
+  const setItemPrice = (key, v) => setCart(prev =>
+    prev.map(i => i.cartKey === key ? { ...i, price: Math.max(0, parseFloat(v) || 0) } : i)
   )
-  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id))
+  const removeItem = (key) => setCart(prev => prev.filter(i => i.cartKey !== key))
 
   function resetBill() {
     setCart([]); setCustomerName(''); setCustomerPhone('')
     setDiscount(''); setNotes(''); setPayMethod('cash'); setError('')
     setLookupResults([]); setLookupOpen(false); setLookupField(null)
+    setVariantPicker(null)
   }
 
   // Debounced customer search — fires 250ms after the admin stops typing in
@@ -299,6 +326,41 @@ export default function BillingPage() {
         </div>
       )}
 
+      {/* Variant picker sheet */}
+      {variantPicker && (
+        <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setVariantPicker(null)}>
+          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 text-sm">{variantPicker.product.name}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Select quantity / variant</p>
+              </div>
+              <button onClick={() => setVariantPicker(null)} className="p-1.5 hover:bg-gray-100 rounded-xl">
+                <X size={16}/>
+              </button>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-2.5 max-h-72 overflow-y-auto">
+              {variantPicker.variants.map(v => {
+                const alreadyQty = cart.find(i => i.cartKey === `${variantPicker.product.id}|${v.label}`)?.qty || 0
+                return (
+                  <button key={v.label}
+                    onClick={() => { addToCartDirect(variantPicker.product, v); setVariantPicker(null) }}
+                    className="flex flex-col items-start p-3 rounded-xl border-2 border-gray-100 hover:border-[#1B4332] hover:bg-emerald-50 transition-all text-left relative">
+                    {alreadyQty > 0 && (
+                      <span className="absolute top-2 right-2 w-5 h-5 bg-[#1B4332] text-white text-[10px] font-black rounded-full flex items-center justify-center">{alreadyQty}</span>
+                    )}
+                    <span className="text-sm font-bold text-gray-800">{v.label}</span>
+                    <span className="text-base font-black text-[#1B4332] mt-0.5">{fmtRs(v.price)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-4 h-[calc(100vh-130px)] overflow-hidden">
 
         {/* ══ LEFT: Product Catalog ════════════════════════════════════════════ */}
@@ -349,19 +411,20 @@ export default function BillingPage() {
                   const hasOffer   = p.offer_price && Number(p.offer_price) > 0 && Number(p.offer_price) < Number(p.price)
                   const stock      = Number(p.stock)
                   const outOfStock = stock <= 0
-                  const inCart     = cart.find(i => i.id === p.id)
+                  const inCart     = cart.filter(i => i.id === p.id)
+                  const inCartQty  = inCart.reduce((s, i) => s + i.qty, 0)
                   return (
                     <div key={p.id}
-                      onClick={() => !outOfStock && addToCart(p)}
+                      onClick={() => !outOfStock && handleProductClick(p)}
                       className={`relative bg-white rounded-xl border-2 overflow-hidden transition-all duration-150 select-none
                         ${outOfStock ? 'opacity-50 cursor-not-allowed border-gray-100' :
-                          inCart ? 'border-[#1B4332] shadow-md cursor-pointer ring-1 ring-[#1B4332]/20' :
+                          inCartQty > 0 ? 'border-[#1B4332] shadow-md cursor-pointer ring-1 ring-[#1B4332]/20' :
                           'border-gray-100 hover:border-[#1B4332] hover:shadow-sm cursor-pointer'}`}
                     >
                       {/* Cart badge */}
-                      {inCart && (
+                      {inCartQty > 0 && (
                         <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 bg-[#1B4332] rounded-full text-white text-[10px] font-black flex items-center justify-center shadow">
-                          {inCart.qty}
+                          {inCartQty}
                         </div>
                       )}
 
@@ -479,8 +542,8 @@ export default function BillingPage() {
             ) : (
               <div className="space-y-3">
                 {cart.map(item => (
-                  <div key={item.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 flex gap-3">
-                    {/* Product image — bigger thumbnail */}
+                  <div key={item.cartKey} className="bg-gray-50 border border-gray-100 rounded-2xl p-3 flex gap-3">
+                    {/* Product image */}
                     <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
                       {item.image
                         ? <img src={item.image} alt={item.name}
@@ -494,13 +557,15 @@ export default function BillingPage() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-800 leading-tight mb-0.5">{item.name}</p>
-                      {item.unit && <p className="text-xs text-gray-400 mb-2">{item.unit}</p>}
+                      {item.unit && (
+                        <span className="inline-block text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full mb-1.5">{item.unit}</span>
+                      )}
 
                       {/* Price row */}
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs text-gray-400 font-medium">₹</span>
                         <input type="number" value={item.price}
-                          onChange={e => setItemPrice(item.id, e.target.value)}
+                          onChange={e => setItemPrice(item.cartKey, e.target.value)}
                           className="w-20 text-sm font-semibold border border-gray-200 bg-white rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
                           min={0} step={0.5}/>
                         <span className="text-xs text-gray-500 font-bold">= {fmtRs(item.price * item.qty)}</span>
@@ -509,20 +574,20 @@ export default function BillingPage() {
 
                     {/* Qty controls + remove */}
                     <div className="flex flex-col items-end justify-between">
-                      <button onClick={() => removeItem(item.id)}
+                      <button onClick={() => removeItem(item.cartKey)}
                         className="w-6 h-6 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors">
                         <X size={13}/>
                       </button>
                       <div className="flex items-center gap-1.5 mt-2">
-                        <button onClick={() => changeQty(item.id, -1)}
+                        <button onClick={() => changeQty(item.cartKey, -1)}
                           className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors">
                           <Minus size={11}/>
                         </button>
                         <input type="number" value={item.qty}
-                          onChange={e => setItemQty(item.id, e.target.value)}
+                          onChange={e => setItemQty(item.cartKey, e.target.value)}
                           className="w-9 text-center text-sm font-bold border border-gray-200 bg-white rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
                           min={1} max={item.stock}/>
-                        <button onClick={() => changeQty(item.id, 1)}
+                        <button onClick={() => changeQty(item.cartKey, 1)}
                           className="w-7 h-7 rounded-lg bg-[#1B4332] hover:bg-[#163826] text-white flex items-center justify-center transition-colors">
                           <Plus size={11}/>
                         </button>
