@@ -11,36 +11,43 @@ export async function getDashboardStats(req, res) {
       // TODAY's orders (all non-cancelled)
       query(`SELECT COUNT(*) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // TODAY's revenue (all non-cancelled orders)
       query(`SELECT COALESCE(SUM(total),0) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // TODAY's unique customers who placed an order
       query(`SELECT COUNT(DISTINCT user_id) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // LIVE pending orders (all time - this is a live work queue)
       query(`SELECT COUNT(*) AS total FROM orders
-             WHERE status IN ('placed','accepted','preparing','out_for_delivery')`),
+             WHERE deleted_at IS NULL
+               AND status IN ('placed','accepted','preparing','out_for_delivery')`),
 
       // YESTERDAY orders for delta
       query(`SELECT COUNT(*) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // YESTERDAY revenue for delta
       query(`SELECT COALESCE(SUM(total),0) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // YESTERDAY unique customers for delta
       query(`SELECT COUNT(DISTINCT user_id) AS total FROM orders
              WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE - 1
-               AND status NOT IN ('cancelled','rejected')`),
+               AND status NOT IN ('cancelled','rejected')
+               AND deleted_at IS NULL`),
 
       // Last 7 days daily breakdown
       query(`
@@ -54,6 +61,7 @@ export async function getDashboardStats(req, res) {
         LEFT JOIN orders o
           ON DATE(o.created_at AT TIME ZONE 'Asia/Kolkata') = d.date
          AND o.status NOT IN ('cancelled','rejected')
+         AND o.deleted_at IS NULL
         GROUP BY d.date ORDER BY d.date ASC
       `),
 
@@ -68,6 +76,7 @@ export async function getDashboardStats(req, res) {
         ) AS item
         LEFT JOIN products p ON p.id::text = item->>'id'
         WHERE o.status NOT IN ('cancelled','rejected')
+          AND o.deleted_at IS NULL
           AND p.id IS NOT NULL
           AND (item->>'quantity') ~ '^[0-9]+$'
         GROUP BY p.id, p.name, p.image_url, p.category
@@ -82,13 +91,14 @@ export async function getDashboardStats(req, res) {
                u.email AS customer_email
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.deleted_at IS NULL
         ORDER BY o.created_at DESC LIMIT 8
       `),
 
       // Status breakdown
       query(`
         SELECT status, COUNT(*) as count
-        FROM orders GROUP BY status ORDER BY count DESC
+        FROM orders WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC
       `),
     ])
 
@@ -130,7 +140,7 @@ export async function getSalesAnalytics(req, res) {
       FROM generate_series(
         CURRENT_DATE - ($1 || ' days')::interval, CURRENT_DATE, '1 day'
       ) AS d(date)
-      LEFT JOIN orders o ON DATE(o.created_at) = d.date AND o.status NOT IN ('cancelled','rejected')
+      LEFT JOIN orders o ON DATE(o.created_at) = d.date AND o.status NOT IN ('cancelled','rejected') AND o.deleted_at IS NULL
       GROUP BY d.date ORDER BY d.date ASC
     `, [period])
     res.json(rows)
@@ -150,6 +160,7 @@ export async function getCategoryRevenue(req, res) {
       ) AS item
       LEFT JOIN products p ON p.id::text = item->>'id'
       WHERE o.status NOT IN ('cancelled','rejected')
+        AND o.deleted_at IS NULL
         AND p.id IS NOT NULL
         AND (item->>'quantity') ~ '^[0-9]+$'
         AND (item->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
@@ -164,7 +175,7 @@ export async function getOrderStatusBreakdown(req, res) {
     const { rows } = await query(`
       SELECT status, COUNT(*) as count,
              COALESCE(SUM(total),0) as revenue
-      FROM orders GROUP BY status ORDER BY count DESC
+      FROM orders WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC
     `)
     res.json(rows)
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }

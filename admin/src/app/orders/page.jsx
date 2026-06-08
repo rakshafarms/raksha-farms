@@ -6,7 +6,7 @@ import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
   Package, Clock, CreditCard, Smartphone, Banknote,
-  Calendar, Printer, FileSpreadsheet, Bell, Store, Globe, Receipt
+  Calendar, Printer, FileSpreadsheet, Bell, Store, Globe, Receipt, Trash2
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -249,8 +249,58 @@ function RejectModal({ order, onClose, onConfirm }) {
   )
 }
 
+// ── Delete Modal ──────────────────────────────────────────────────────────────
+function DeleteModal({ order, onClose, onConfirm }) {
+  const [remarks, setRemarks]       = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr]               = useState('')
+
+  async function submit() {
+    if (!remarks.trim()) { setErr('Please enter a reason for deleting this order'); return }
+    setSubmitting(true)
+    await onConfirm(remarks.trim())
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Delete Order</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono font-bold">#{order.reference_id || (order.created_at ? fmtOrderId(order.created_at) : order.id?.slice(0,8))}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X size={16}/></button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5"/>
+            <span>This removes the order from sales totals and the dashboard. It stays here, marked as deleted, for your records.</span>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Reason <span className="text-red-500">*</span></label>
+            <textarea value={remarks} onChange={e => { setRemarks(e.target.value); setErr('') }}
+              placeholder="e.g. Test entry, duplicate bill, entered by mistake…" rows={3} autoFocus
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 resize-none"/>
+          </div>
+        </div>
+
+        {err && <p className="px-6 pb-2 text-xs font-semibold text-red-600">{err}</p>}
+        <div className="flex gap-3 px-6 pb-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm transition-colors">Cancel</button>
+          <button onClick={submit} disabled={submitting || !remarks.trim()}
+            className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-40 text-white font-bold rounded-xl text-sm transition-colors">
+            {submitting ? 'Deleting…' : 'Delete Order'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Order Row (expanded card) ──────────────────────────────────────────────────
-function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, onSelect }) {
+function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, onDelete, selected, onSelect }) {
   const isOpen   = expanded === o.id
   const addr     = parseAddr(o)
   const notes    = parseNotes(o)
@@ -260,11 +310,13 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
   const walkIn   = isWalkIn(o)
   const phone    = addr.phone || o.customer_phone || ''
   const name     = addr.name  || o.customer_name  || 'Guest'
+  const isDeleted = !!o.deleted_at
 
   return (
     <div className={`rounded-2xl overflow-hidden transition-shadow hover:shadow-md border-l-4 ${
-      walkIn ? 'border-l-amber-400 border border-amber-100 bg-amber-50/30' : 'border-l-sky-400 border border-gray-100 bg-white'
-    } ${isOpen ? 'shadow-md' : 'shadow-sm'}`}>
+      isDeleted ? 'border-l-red-300 border border-red-100 bg-red-50/30'
+      : walkIn ? 'border-l-amber-400 border border-amber-100 bg-amber-50/30' : 'border-l-sky-400 border border-gray-100 bg-white'
+    } ${isOpen ? 'shadow-md' : 'shadow-sm'} ${isDeleted ? 'opacity-70' : ''}`}>
       {/* ── Summary row ── */}
       <div
         className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none ${walkIn ? 'bg-amber-50/40' : 'bg-white'}`}
@@ -319,24 +371,28 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
           {notes && notes.original_total > Number(o.total) && (
             <p className="text-[10px] text-gray-400 line-through leading-none">{fmt(notes.original_total)}</p>
           )}
-          <p className="font-bold text-gray-900 text-sm">{fmt(o.total)}</p>
+          <p className={`font-bold text-sm ${isDeleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{fmt(o.total)}</p>
         </div>
 
         {/* Status */}
         <div className="flex-shrink-0 ml-2">
-          <StatusPill status={o.status} isPartial={partial}/>
+          {isDeleted
+            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-600 ring-1 ring-red-200"><Trash2 size={11}/> Deleted</span>
+            : <StatusPill status={o.status} isPartial={partial}/>}
         </div>
 
         {/* Actions (stop propagation) */}
         <div className="flex-shrink-0 flex items-center gap-1.5 ml-2" onClick={e => e.stopPropagation()}>
-          <select
-            value={o.status}
-            onChange={e => onChangeStatus(o.id, e.target.value)}
-            disabled={isFinal}
-            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1B4332] bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
-          </select>
+          {!isDeleted && (
+            <select
+              value={o.status}
+              onChange={e => onChangeStatus(o.id, e.target.value)}
+              disabled={isFinal}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1B4332] bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
+            </select>
+          )}
           {/* Print Bill */}
           <button
             onClick={() => printOrderBill(o)}
@@ -345,13 +401,22 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
           >
             <Printer size={14}/>
           </button>
-          {!isFinal && (
+          {!isDeleted && !isFinal && (
             <button
               onClick={() => onReject({ ...o, items: Array.isArray(o.items) ? o.items : [] })}
               title="Reject items"
               className="p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
             >
               <AlertTriangle size={14}/>
+            </button>
+          )}
+          {!isDeleted && (
+            <button
+              onClick={() => onDelete(o)}
+              title="Delete order"
+              className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+            >
+              <Trash2 size={14}/>
             </button>
           )}
         </div>
@@ -361,6 +426,18 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, selected, o
           {isOpen ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
         </div>
       </div>
+
+      {/* ── Deleted banner ── */}
+      {isDeleted && (
+        <div className="flex items-start gap-2 px-4 py-2 bg-red-50 border-t border-red-100 text-xs text-red-700">
+          <Trash2 size={12} className="mt-0.5 flex-shrink-0"/>
+          <span>
+            <span className="font-bold">Deleted</span>
+            {o.delete_remarks ? <span className="italic text-red-600"> — {o.delete_remarks}</span> : ''}
+            <span className="text-red-400"> · excluded from totals</span>
+          </span>
+        </div>
+      )}
 
       {/* ── Expanded detail ── */}
       {isOpen && (
@@ -522,6 +599,7 @@ export default function OrdersPage() {
   const [loading, setLoading]       = useState(true)
   const [expanded, setExpanded]     = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [downloading, setDownloading] = useState(false)
   const [toast, setToast]           = useState(null)
@@ -652,6 +730,19 @@ export default function OrdersPage() {
       showToast(newStatus === 'rejected' ? 'Order fully rejected' : 'Partial rejection saved')
     } catch(e) {
       showToast(e.response?.data?.error || 'Rejection failed', 'error')
+    }
+  }
+
+  async function handleDeleteConfirm(remarks) {
+    const id = deleteTarget?.id
+    if (!id) return
+    try {
+      await ordersAPI.softDelete(id, remarks)
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, deleted_at: new Date().toISOString(), delete_remarks: remarks } : o))
+      setDeleteTarget(null)
+      showToast('Order deleted — removed from totals')
+    } catch(e) {
+      showToast(e.response?.data?.error || 'Delete failed', 'error')
     }
   }
 
@@ -799,6 +890,14 @@ export default function OrdersPage() {
           order={rejectOrder}
           onClose={() => setRejectOrder(null)}
           onConfirm={(s,r,items) => handleRejectConfirm(rejectOrder.id, s, r, items)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteModal
+          order={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
         />
       )}
 
@@ -1000,6 +1099,7 @@ export default function OrdersPage() {
                     onToggle={() => setExpanded(expanded === o.id ? null : o.id)}
                     onChangeStatus={changeStatus}
                     onReject={setRejectOrder}
+                    onDelete={setDeleteTarget}
                     selected={selectedIds.has(o.id)}
                     onSelect={toggleOrderSelection}
                   />

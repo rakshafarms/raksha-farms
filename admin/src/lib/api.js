@@ -53,6 +53,7 @@ export const ordersAPI = {
   getAll: (params) => api.get('/orders', { params }),
   getOne: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, status, extras = {}) => api.patch(`/orders/${id}/status`, { status, ...extras }),
+  softDelete: (id, remarks) => api.delete(`/orders/${id}`, { data: { remarks } }),
   getStats: () => api.get('/orders/stats'),
   createWalkIn: (data) => api.post('/orders/walkin', data),
   // EventSource uses withCredentials so the admin_token cookie is sent automatically.

@@ -262,6 +262,11 @@ export async function initDb() {
     // delivery_time column for marking actual delivery timestamp
     await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_time TIMESTAMPTZ`).catch(() => {})
 
+    // Soft-delete: admin removes an order from history/totals but keeps the row
+    // (with a reason) so it stays visible in the admin list, marked as deleted.
+    await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`).catch(() => {})
+    await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delete_remarks TEXT`).catch(() => {})
+
     // Saved addresses table — allows users to save multiple named addresses
     await query(`
       CREATE TABLE IF NOT EXISTS user_addresses (

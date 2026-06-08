@@ -663,6 +663,26 @@ export async function updateOrderStatus(req, res) {
   }
 }
 
+// ── Soft-delete an order (admin) ─────────────────────────────────────────────
+// Keeps the row so it stays visible in the admin list (marked deleted), but a
+// non-null deleted_at excludes it from every dashboard total and revenue figure.
+// A reason (remarks) is required and stored for the audit trail.
+export async function softDeleteOrder(req, res) {
+  try {
+    const remarks = (req.body?.remarks || '').trim()
+    if (!remarks) return res.status(400).json({ error: 'Remarks are required to delete an order' })
+    const { rows } = await query(
+      `UPDATE orders
+         SET deleted_at = NOW(), delete_remarks = $1, updated_at = NOW()
+       WHERE id = $2 AND deleted_at IS NULL
+       RETURNING *`,
+      [remarks, req.params.id]
+    )
+    if (!rows[0]) return res.status(404).json({ error: 'Order not found or already deleted' })
+    res.json(rows[0])
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
+}
+
 // Authenticated: return all orders for the logged-in user
 export async function getMyOrders(req, res) {
   try {
@@ -711,7 +731,7 @@ export async function getMyOrders(req, res) {
       `SELECT id, reference_id, status, total, delivery_fee, payment_method,
               items, address, notes, created_at, updated_at
        FROM orders
-       WHERE user_id=$1
+       WHERE user_id=$1 AND deleted_at IS NULL
        ORDER BY created_at DESC LIMIT 100`,
       [req.user.id]
     )
@@ -732,6 +752,7 @@ export async function getOrdersByPhone(req, res) {
               items, address, notes, created_at, updated_at
        FROM orders
        WHERE RIGHT(REGEXP_REPLACE(address->>'phone','\\D','','g'),10) = $1
+         AND deleted_at IS NULL
          AND created_at > NOW() - INTERVAL '90 days'
        ORDER BY created_at DESC
        LIMIT 50`,
@@ -781,7 +802,8 @@ export async function getOrderStats(req, res) {
         COUNT(*) FILTER (WHERE status='cancelled')        AS cancelled,
         COUNT(*) AS total
       FROM orders
-      WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date
+      WHERE deleted_at IS NULL
+        AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
             = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
     `)
     res.json(rows[0])

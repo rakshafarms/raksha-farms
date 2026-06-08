@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { getOrders, getOrder, createOrder, createWalkInOrder, updateOrderStatus, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
+import { getOrders, getOrder, createOrder, createWalkInOrder, updateOrderStatus, softDeleteOrder, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
 import { adminSecret, verifyToken } from '../middleware/auth.js'
 
 // Optional auth middleware — attaches user if token valid, silently ignores bad/expired tokens
@@ -37,4 +37,5 @@ r.get('/track/:id', optionalAuth, trackOrder)         // Poll by DB UUID
 r.get('/track-ref/:ref', trackOrderByRef)             // Poll by RF-... reference ID (no auth)
 r.get('/:id', adminSecret, getOrder)
 r.patch('/:id/status', adminSecret, updateOrderStatus)
+r.delete('/:id', adminSecret, softDeleteOrder)   // Soft-delete: keep the row, exclude from totals
 export default r
