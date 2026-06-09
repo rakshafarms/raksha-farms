@@ -1,46 +1,36 @@
 import multer from 'multer'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import fs from 'fs'
-
-// On Render: disk is mounted at /uploads
-// Locally: save to <project>/uploads
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')
-
-// Create upload folder if it doesn't exist.
-// Wrapped in try/catch so a missing Render disk (EACCES on /var/data/*)
-// never crashes the server — image uploads just fail gracefully instead.
-try {
-  if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true })
-  }
-} catch (err) {
-  console.warn(`⚠ Could not create upload dir "${UPLOAD_DIR}": ${err.message}`)
-  console.warn('  Remove the UPLOAD_DIR env var on Render if no disk is mounted.')
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase()
-    cb(null, `${uuidv4()}${ext}`)
-  }
-})
+import { PutObjectCommand } from '@aws-sdk/client-s3'
+import { r2, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2.js'
 
 const fileFilter = (req, file, cb) => {
-  const allowed = ['.jpg', '.jpeg', '.png', '.webp']
   const ext = path.extname(file.originalname).toLowerCase()
-  if (allowed.includes(ext)) cb(null, true)
+  if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) cb(null, true)
   else cb(new Error('Only image files allowed'), false)
 }
 
+// Store files in memory — we push them to R2 after multer parses the request
 export const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
 })
 
-// Use upload.any() so multer never throws "unexpected field" regardless of
-// what field names the client sends. The controller filters by fieldname.
-// Accepts up to 11 files total (1 cover + 10 gallery).
+// upload.any() so multer never throws "unexpected field" regardless of field names.
+// The controller filters by fieldname. Accepts up to 11 files (1 cover + 10 gallery).
 export const uploadProductImages = upload.any()
+
+// Upload a file buffer to R2 and return the public URL.
+// key prefix is "products/" so all product images are in one folder.
+export async function uploadToR2(buffer, originalname, mimetype) {
+  const ext = (path.extname(originalname || '').toLowerCase()) || '.jpg'
+  const key = `products/${uuidv4()}${ext}`
+  await r2.send(new PutObjectCommand({
+    Bucket:      R2_BUCKET,
+    Key:         key,
+    Body:        buffer,
+    ContentType: mimetype || 'image/jpeg',
+  }))
+  return `${R2_PUBLIC_URL}/${key}`
+}

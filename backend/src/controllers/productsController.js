@@ -1,8 +1,8 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
-import fs from 'fs/promises'
 import path from 'path'
 import { randomUUID } from 'crypto'
+import { uploadToR2 } from '../middleware/upload.js'
 
 // ── Customer-facing: active products only ─────────────────────────────────────
 export async function getProducts(req, res) {
@@ -57,26 +57,32 @@ export async function getProduct(req, res) {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 
-// Helper: extract uploaded file URLs.
-// Works with upload.any()  → req.files is a flat array [{fieldname, filename, …}]
-// Works with upload.fields() → req.files is an object  { image:[…], images:[…] }
+// Helper: extract uploaded file URLs — uploads buffers to R2.
+// Works with upload.any()    → req.files is a flat array [{fieldname, buffer, …}]
+// Works with upload.fields() → req.files is an object   { image:[…], images:[…] }
 // Works with upload.single() → req.file  is a single object
-function extractImageUrls(req) {
+async function extractImageUrls(req) {
   const raw = req.files
-  // Normalise to a flat array regardless of multer mode
   let allFiles = []
   if (Array.isArray(raw)) {
-    allFiles = raw                              // upload.any()
+    allFiles = raw
   } else if (raw && typeof raw === 'object') {
-    allFiles = Object.values(raw).flat()       // upload.fields()
+    allFiles = Object.values(raw).flat()
   } else if (req.file) {
-    allFiles = [req.file]                      // upload.single()
+    allFiles = [req.file]
   }
 
-  const coverFile      = allFiles.find(f => f.fieldname === 'image') || req.file
-  const image_url      = coverFile ? `/uploads/${coverFile.filename}` : undefined
-  const galleryFiles   = allFiles.filter(f => f.fieldname === 'images')
-  const newGalleryUrls = galleryFiles.map(f => `/uploads/${f.filename}`)
+  const coverFile    = allFiles.find(f => f.fieldname === 'image') || req.file
+  const galleryFiles = allFiles.filter(f => f.fieldname === 'images')
+
+  const image_url = coverFile
+    ? await uploadToR2(coverFile.buffer, coverFile.originalname, coverFile.mimetype)
+    : undefined
+
+  const newGalleryUrls = await Promise.all(
+    galleryFiles.map(f => uploadToR2(f.buffer, f.originalname, f.mimetype))
+  )
+
   return { image_url, newGalleryUrls }
 }
 
@@ -99,7 +105,7 @@ export async function createProduct(req, res) {
     if (isNaN(priceNum) || priceNum < 0) return res.status(400).json({ error: 'price must be a non-negative number' })
     if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative integer' })
 
-    const { image_url, newGalleryUrls } = extractImageUrls(req)
+    const { image_url, newGalleryUrls } = await extractImageUrls(req)
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
     const parsedVars  = parseVariants(variants) || []
     const imagesArr   = newGalleryUrls  // new product starts with empty gallery + newly uploaded
@@ -234,30 +240,23 @@ export async function getLowStock(req, res) {
 // Returns: { updated: N, created: N, skipped: [...], errors: [...] }
 // ────────────────────────────────────────────────────────────────────────────
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')
-
-// Download a remote image to /uploads and return its public path (or null on failure).
+// Download a remote image URL and upload it to R2 — returns the R2 public URL (or null on failure).
 async function downloadImage(url) {
   if (!url || typeof url !== 'string') return null
   const trimmed = url.trim()
   if (!trimmed) return null
-  // Already a local upload — keep as-is
-  if (trimmed.startsWith('/uploads/')) return trimmed
-  // Not http(s)? Reject — we don't trust other protocols
+  // Not http(s)? Reject
   if (!/^https?:\/\//i.test(trimmed)) return null
   try {
     const response = await fetch(trimmed, { redirect: 'follow' })
     if (!response.ok) return null
     const ct = response.headers.get('content-type') || ''
     if (!ct.startsWith('image/')) return null
-    const ext = ct.split('/')[1].split(';')[0].replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg'
     const buf = Buffer.from(await response.arrayBuffer())
     // Guard against oversized images (5 MB cap)
     if (buf.length > 5 * 1024 * 1024) return null
-    await fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(() => {})
-    const filename = `bulk-${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
-    await fs.writeFile(path.join(UPLOAD_DIR, filename), buf)
-    return `/uploads/${filename}`
+    const ext = ct.split('/')[1].split(';')[0].replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg'
+    return await uploadToR2(buf, `bulk.${ext}`, ct.split(';')[0])
   } catch (err) {
     console.warn('downloadImage failed for', trimmed, '—', err.message)
     return null
