@@ -331,7 +331,7 @@ export async function createOrder(req, res) {
 export async function createWalkInOrder(req, res) {
   const client = await pool.connect()
   try {
-    const { customerName, customerPhone, items, paymentMethod, discount = 0, notes = '' } = req.body
+    const { customerName, customerPhone, items, paymentMethod, discount = 0, notes = '', address: addrInput } = req.body
     if (!customerName?.trim()) return res.status(400).json({ error: 'Customer name is required' })
     if (!items?.length)        return res.status(400).json({ error: 'At least one item is required' })
 
@@ -409,7 +409,12 @@ export async function createWalkInOrder(req, res) {
       if (u[0]) userId = u[0].id
     }
 
-    const address = { name: customerName.trim(), phone: customerPhone || '', type: 'walk_in' }
+    const address = {
+      name: customerName.trim(),
+      phone: customerPhone || '',
+      type: 'walk_in',
+      ...(addrInput?.address ? { address: addrInput.address } : {}),
+    }
 
     const { rows: [order] } = await client.query(
       `INSERT INTO orders

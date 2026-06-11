@@ -92,7 +92,7 @@ function parseVariants(raw) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, category, description, price, offer_price, stock, unit, variants, is_featured } = req.body
+    const { name, category, description, price, offer_price, stock, unit, variants, is_featured, is_organic } = req.body
     if (!name || !category || price === undefined || stock === undefined)
       return res.status(400).json({ error: 'name, category, price, and stock are required' })
     const priceNum = Number(price); const stockNum = parseInt(stock, 10)
@@ -102,13 +102,14 @@ export async function createProduct(req, res) {
     const { image_url, newGalleryUrls } = extractImageUrls(req)
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
     const parsedVars  = parseVariants(variants) || []
-    const imagesArr   = newGalleryUrls  // new product starts with empty gallery + newly uploaded
+    const imagesArr   = newGalleryUrls
+    const organicVal  = is_organic === true || is_organic === 'true'
 
     const { rows } = await query(
-      `INSERT INTO products (name, category, description, price, offer_price, stock, unit, image_url, variants, images, is_featured)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO products (name, category, description, price, offer_price, stock, unit, image_url, variants, images, is_featured, is_organic)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [name, category, description, priceNum, offerVal, stockNum, unit,
-       image_url || null, JSON.stringify(parsedVars), JSON.stringify(imagesArr), is_featured || false]
+       image_url || null, JSON.stringify(parsedVars), JSON.stringify(imagesArr), is_featured || false, organicVal]
     )
     res.status(201).json(rows[0])
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
@@ -117,10 +118,11 @@ export async function createProduct(req, res) {
 export async function updateProduct(req, res) {
   try {
     const { name, category, description, price, offer_price, stock, unit,
-            is_active, is_featured, variants, existing_images, remove_image } = req.body
+            is_active, is_featured, is_organic, variants, existing_images, remove_image } = req.body
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
     const activeVal   = is_active === true || is_active === 'true'
     const featuredVal = is_featured === true || is_featured === 'true'
+    const organicVal  = is_organic === true || is_organic === 'true'
 
     const { rows: existing } = await query('SELECT id, image_url, images FROM products WHERE id=$1', [req.params.id])
     if (!existing[0]) return res.status(404).json({ error: 'Product not found' })
@@ -145,10 +147,10 @@ export async function updateProduct(req, res) {
     const sets = [
       `name=$1`, `category=$2`, `description=$3`, `price=$4`,
       `stock=$5`, `unit=$6`, `is_active=$7`, `is_featured=$8`,
-      `offer_price=$9`, `image_url=$10`, `images=$11`, `updated_at=NOW()`
+      `offer_price=$9`, `image_url=$10`, `images=$11`, `is_organic=$12`, `updated_at=NOW()`
     ]
     const vals = [name, category, description, price, stock, unit,
-                  activeVal, featuredVal, offerVal, coverUrl, JSON.stringify(finalImages)]
+                  activeVal, featuredVal, offerVal, coverUrl, JSON.stringify(finalImages), organicVal]
 
     // variants only updated when explicitly provided
     const parsedVars = parseVariants(variants)
@@ -312,6 +314,10 @@ export async function bulkImportProducts(req, res) {
         const galleryRaw   = row.gallery_urls != null ? String(row.gallery_urls).trim() : ''
         const isActive     = bool(row.is_active, true)
         const isFeatured   = bool(row.is_featured, false)
+        const isOrganic    = bool(row.is_organic, false)
+        const variantsRaw  = row.variants != null && String(row.variants).trim() !== ''
+          ? (() => { try { return JSON.parse(String(row.variants)) } catch { return null } })()
+          : null
 
         // ── Locate existing product (ID first, then name fallback) ───────
         let existing = null
@@ -351,9 +357,11 @@ export async function bulkImportProducts(req, res) {
           const finalGallery     = galleryItems.length > 0
             ? JSON.stringify(newGalleryPaths)
             : existing.images
-          // is_active / is_featured: only apply if cell is non-blank
+          // is_active / is_featured / is_organic: only apply if cell is non-blank
           const finalActive      = row.is_active   !== undefined && row.is_active   !== '' ? isActive   : existing.is_active
           const finalFeatured    = row.is_featured !== undefined && row.is_featured !== '' ? isFeatured : existing.is_featured
+          const finalOrganic     = row.is_organic  !== undefined && row.is_organic  !== '' ? isOrganic  : (existing.is_organic || false)
+          const finalVariants    = variantsRaw !== null ? JSON.stringify(variantsRaw) : existing.variants
 
           const prevStock = Number(existing.stock || 0)
 
@@ -361,11 +369,11 @@ export async function bulkImportProducts(req, res) {
             `UPDATE products SET
                 name=$1, category=$2, description=$3, price=$4, offer_price=$5,
                 stock=$6, unit=$7, image_url=$8, images=$9, is_active=$10, is_featured=$11,
-                updated_at=NOW()
-             WHERE id=$12`,
+                is_organic=$12, variants=$13, updated_at=NOW()
+             WHERE id=$14`,
             [finalName, finalCategory, finalDescription, finalPrice, finalOfferPrice,
              finalStock, finalUnit, finalCover, finalGallery, finalActive, finalFeatured,
-             existing.id]
+             finalOrganic, finalVariants, existing.id]
           )
 
           // Log stock change if it changed
@@ -398,10 +406,11 @@ export async function bulkImportProducts(req, res) {
           await client.query(
             `INSERT INTO products
                 (name, category, description, price, offer_price, stock, unit,
-                 image_url, images, is_active, is_featured)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                 image_url, images, is_active, is_featured, is_organic, variants)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [name, category, description, price, offer_price, finalStock, unit,
-             newCoverPath, JSON.stringify(newGalleryPaths), isActive, isFeatured]
+             newCoverPath, JSON.stringify(newGalleryPaths), isActive, isFeatured,
+             isOrganic, variantsRaw !== null ? JSON.stringify(variantsRaw) : '[]']
           )
           summary.created++
         }

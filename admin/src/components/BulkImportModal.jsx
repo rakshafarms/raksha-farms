@@ -39,7 +39,9 @@ const COLUMNS = [
   'price',
   'offer_price',
   'unit',
+  'is_organic',   // true/false — controls organic badge on website
   'description',
+  'variants',     // JSON array: [{"label":"500ml","price":60,"offer_price":50,"stock":20},...]
   'image_url',    // http(s) URL → backend downloads; or /uploads/... to keep current
   'gallery_urls', // Comma-separated http(s) URLs or /uploads/... paths
   'is_active',    // true/false (defaults to true on new rows)
@@ -62,11 +64,16 @@ export default function BulkImportModal({ open, onClose, products, onImported })
       id:           p.id || '',
       name:         p.name || '',
       category:     p.category || '',
-      description:  p.description || '',
+      stock:        p.stock ?? 0,
       price:        p.price ?? '',
       offer_price:  p.offer_price ?? '',
-      stock:        p.stock ?? 0,
       unit:         p.unit || '',
+      is_organic:   p.is_organic ? 'true' : 'false',
+      description:  p.description || '',
+      variants:     (() => {
+        const v = Array.isArray(p.variants) ? p.variants : (() => { try { return JSON.parse(p.variants || '[]') } catch { return [] } })()
+        return v.length > 0 ? JSON.stringify(v) : ''
+      })(),
       // Convert relative /uploads/... paths to absolute URLs so admins can open
       // them in a browser. On re-upload the backend recognises both formats.
       image_url:    p.image_url || '',
@@ -89,7 +96,9 @@ export default function BulkImportModal({ open, onClose, products, onImported })
       { wch: 10 },                  // price
       { wch: 12 },                  // offer_price
       { wch: 10 },                  // unit
+      { wch: 12 },                  // is_organic
       { wch: 45 },                  // description
+      { wch: 80 },                  // variants (JSON)
       { wch: 45 },                  // image_url
       { wch: 60 },                  // gallery_urls
       { wch: 10 },                  // is_active
@@ -114,8 +123,9 @@ export default function BulkImportModal({ open, onClose, products, onImported })
       ['3. To LEAVE a product unchanged, just delete its row from the file. Anything not in the file is left alone in the database — nothing gets auto-deleted.'],
       ['4. For images, paste a public http(s) URL into image_url or gallery_urls — the system will download and store the image. To keep the current image, leave the cell empty.'],
       ['5. gallery_urls is comma-separated. Example: https://site.com/a.jpg, https://site.com/b.jpg'],
-      ['6. is_active and is_featured accept: true / false / yes / no / 1 / 0.'],
-      ['7. Save the file and upload it back via the "Upload Excel" button in the admin panel.'],
+      ['6. is_active, is_featured, and is_organic accept: true / false / yes / no / 1 / 0.'],
+      ['7. variants column: paste a JSON array like [{"label":"500ml","price":60,"offer_price":50,"stock":20},{"label":"1L","price":110,"stock":15}]. Leave blank if no variants.'],
+      ['8. Save the file and upload it back via the "Upload Excel" button in the admin panel.'],
       [],
       ['Maximum 1000 rows per upload. The whole upload runs in one database transaction — if any row fails, ALL changes are rolled back, so you never end up with a half-updated catalogue.'],
     ]

@@ -124,8 +124,8 @@ export default function ProductCard({ product }) {
           )}
         </div>
 
-        {/* Organic badge */}
-        {!isOutOfStock && (
+        {/* Organic badge — only for products explicitly marked organic */}
+        {!isOutOfStock && product.is_organic && (
           <div className="absolute top-2 right-2">
             <span className="organic-badge inline-flex items-center gap-0.5 bg-forest-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
               <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

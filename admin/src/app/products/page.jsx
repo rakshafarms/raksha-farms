@@ -23,7 +23,7 @@ const FALLBACK_CATEGORIES = [
   { slug:'millets', name:'Millets' },{ slug:'eggs', name:'Eggs & Meat' },
   { slug:'flours', name:'Stone-Ground Flours' },
 ]
-const EMPTY = { name:'', category:'', description:'', price:'', offer_price:'', stock:'', unit:'kg', is_featured:false, is_active:true, variants:[], existingImages:[], coverImageUrl:null }
+const EMPTY = { name:'', category:'', description:'', price:'', offer_price:'', stock:'', unit:'kg', is_featured:false, is_active:true, is_organic:false, variants:[], existingImages:[], coverImageUrl:null }
 
 const STATUS_TABS = [
   { key: '',            label: 'All' },
@@ -96,7 +96,7 @@ export default function ProductsPage() {
       name: p.name, category: p.category, description: p.description||'',
       price: p.price, offer_price: p.offer_price||'', stock: p.stock,
       unit: p.unit||'kg', is_featured: p.is_featured||false,
-      is_active: p.is_active !== false,
+      is_active: p.is_active !== false, is_organic: p.is_organic||false,
       variants: Array.isArray(p.variants) ? p.variants : [],
       existingImages,
       coverImageUrl: p.image_url || null,
@@ -417,15 +417,16 @@ export default function ProductsPage() {
                   ) : (
                     <div className="w-full border border-gray-200 rounded-xl overflow-hidden">
                       {/* Header row */}
-                      <div className="grid grid-cols-[2fr_1.5fr_1.5fr_36px] bg-gray-50 border-b border-gray-200">
+                      <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1.5fr_36px] bg-gray-50 border-b border-gray-200">
                         <div className="px-3 py-2 text-xs font-semibold text-gray-500">Label (size)</div>
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Price (₹)</div>
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Stock (qty)</div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">MRP (₹)</div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Offer (₹)</div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-l border-gray-200">Stock</div>
                         <div className="w-9" />
                       </div>
                       {/* Input rows */}
                       {(form.variants||[]).map((v, i) => (
-                        <div key={i} className={`grid grid-cols-[2fr_1.5fr_1.5fr_36px] items-center ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                        <div key={i} className={`grid grid-cols-[2fr_1.5fr_1.5fr_1.5fr_36px] items-center ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                           <input
                             value={v.label} placeholder="e.g. 500ml"
                             onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],label:e.target.value}; return {...p,variants:vs} })}
@@ -433,6 +434,10 @@ export default function ProductsPage() {
                           <input
                             type="number" min="0" step="0.01" value={v.price} placeholder="0.00"
                             onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],price:e.target.value}; return {...p,variants:vs} })}
+                            className="w-full px-3 py-2.5 text-sm bg-transparent border-l border-gray-100 focus:outline-none focus:bg-blue-50 placeholder-gray-300"/>
+                          <input
+                            type="number" min="0" step="0.01" value={v.offer_price||''} placeholder="optional"
+                            onChange={e => setForm(p => { const vs=[...p.variants]; vs[i]={...vs[i],offer_price:e.target.value}; return {...p,variants:vs} })}
                             className="w-full px-3 py-2.5 text-sm bg-transparent border-l border-gray-100 focus:outline-none focus:bg-blue-50 placeholder-gray-300"/>
                           <input
                             type="number" min="0" value={v.stock} placeholder="0"
@@ -535,7 +540,7 @@ export default function ProductsPage() {
                   )}
                 </div>
 
-                <div className="col-span-2 flex items-center gap-4">
+                <div className="col-span-2 flex items-center gap-4 flex-wrap">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={form.is_active}
                       onChange={e=>setForm(p=>({...p,is_active:e.target.checked}))} className="w-4 h-4"/>
@@ -546,6 +551,15 @@ export default function ProductsPage() {
                       onChange={e=>setForm(p=>({...p,is_featured:e.target.checked}))} className="w-4 h-4"/>
                     <span className="text-sm text-gray-700">Featured</span>
                   </label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700 font-medium">Organic?</label>
+                    <select value={form.is_organic ? 'true' : 'false'}
+                      onChange={e=>setForm(p=>({...p,is_organic:e.target.value==='true'}))}
+                      className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]">
+                      <option value="false">Not Organic</option>
+                      <option value="true">Organic</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-3 pt-2">

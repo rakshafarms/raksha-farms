@@ -129,7 +129,7 @@ function printOrderBill(o) {
   <div class="row"><span>Date</span><span>${dateStr}</span></div>
   <div class="row"><span>Customer</span><span class="bold">${name}</span></div>
   ${phone ? `<div class="row"><span>Phone</span><span>${phone}</span></div>` : ''}
-  ${!walkIn && addr.address ? `<div class="row" style="align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px">${addr.address}${addr.city?', '+addr.city:''}${addr.pincode?' — '+addr.pincode:''}</span></div>` : ''}
+  ${addr.address ? `<div class="row" style="align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px;line-height:1.4">${addr.address}${addr.city?', '+addr.city:''}${addr.pincode?' — '+addr.pincode:''}</span></div>` : ''}
   <div class="row"><span>Payment</span><span class="bold">${(o.payment_method || 'COD').toUpperCase()}</span></div>
   <div class="row"><span>Status</span><span class="status">${STATUS_META[o.status]?.label || o.status}</span></div>
   <hr class="divider"/>

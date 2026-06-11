@@ -5,7 +5,7 @@ import { productsAPI, ordersAPI, customersAPI, API_BASE_URL } from '../../lib/ap
 import {
   Search, Plus, Minus, Trash2, Printer, ShoppingBag,
   User, Phone, IndianRupee, Tag, CheckCircle2, X,
-  StickyNote, Zap, UserCheck
+  StickyNote, Zap, UserCheck, MapPin
 } from 'lucide-react'
 
 const PAY = [
@@ -55,6 +55,7 @@ export default function BillingPage() {
   const [payMethod,     setPayMethod]     = useState('cash')
   const [discount,      setDiscount]      = useState('')
   const [notes,         setNotes]         = useState('')
+  const [deliveryAddr,  setDeliveryAddr]  = useState('')
   const [submitting,    setSubmitting]    = useState(false)
   const [error,         setError]         = useState('')
   const [receipt,       setReceipt]       = useState(null)
@@ -138,7 +139,7 @@ export default function BillingPage() {
 
   function resetBill() {
     setCart([]); setCustomerName(''); setCustomerPhone('')
-    setDiscount(''); setNotes(''); setPayMethod('cash'); setError('')
+    setDiscount(''); setNotes(''); setDeliveryAddr(''); setPayMethod('cash'); setError('')
     setLookupResults([]); setLookupOpen(false); setLookupField(null)
     setVariantPicker(null)
   }
@@ -186,8 +187,9 @@ export default function BillingPage() {
         paymentMethod: payMethod,
         discount: discAmt,
         notes: notes.trim(),
+        address: deliveryAddr.trim() ? { address: deliveryAddr.trim() } : undefined,
       })
-      setReceipt({ ...data, customerName: customerName.trim(), customerPhone, payMethod, discAmt, snap: [...cart] })
+      setReceipt({ ...data, customerName: customerName.trim(), customerPhone, payMethod, discAmt, deliveryAddr: deliveryAddr.trim(), snap: [...cart] })
       resetBill()
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to place order')
@@ -226,6 +228,7 @@ export default function BillingPage() {
     <div class="row"><span>Date &amp; Time</span><span>${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour12:true})}</span></div>
     <div class="row"><span>Customer</span><span class="bold">${r.customerName}</span></div>
     ${r.customerPhone ? `<div class="row"><span>Phone</span><span>${r.customerPhone}</span></div>` : ''}
+    ${r.deliveryAddr ? `<div style="display:flex;justify-content:space-between;margin:3px 0;align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px;line-height:1.4">${r.deliveryAddr}</span></div>` : ''}
     <div class="row"><span>Payment</span><span class="bold">${r.payMethod.toUpperCase()}</span></div>
     <hr class="divider"/>
     <div class="row bold"><span>Item</span><span>Qty × Rate</span><span class="right">Amt</span></div>
@@ -278,6 +281,7 @@ export default function BillingPage() {
               {[
                 ['Customer', receipt.customerName],
                 receipt.customerPhone && ['Phone', receipt.customerPhone],
+                receipt.deliveryAddr && ['Address', receipt.deliveryAddr],
                 ['Payment', receipt.payMethod.toUpperCase()],
                 ['Items', `${receipt.snap?.length} product${receipt.snap?.length !== 1 ? 's' : ''}`],
               ].filter(Boolean).map(([k, v]) => (
@@ -485,6 +489,12 @@ export default function BillingPage() {
               )}
             </div>
 
+            <div className="relative">
+              <MapPin size={14} className="absolute left-3 top-3.5 text-gray-400"/>
+              <textarea value={deliveryAddr} onChange={e => setDeliveryAddr(e.target.value)}
+                placeholder="Delivery address (for bill — delivery boy reference)" rows={2}
+                className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] resize-none"/>
+            </div>
             <div className="relative">
               <StickyNote size={14} className="absolute left-3 top-3.5 text-gray-400"/>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}

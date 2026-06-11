@@ -267,6 +267,9 @@ export async function initDb() {
     await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`).catch(() => {})
     await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delete_remarks TEXT`).catch(() => {})
 
+    // Organic flag — only products explicitly marked organic show the organic badge
+    await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_organic BOOLEAN DEFAULT false`).catch(() => {})
+
     // Saved addresses table — allows users to save multiple named addresses
     await query(`
       CREATE TABLE IF NOT EXISTS user_addresses (
