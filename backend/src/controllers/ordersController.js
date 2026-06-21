@@ -488,9 +488,9 @@ export async function getOrders(req, res) {
     const countSql = `SELECT COUNT(*) ${baseSql}`
     const dataSql  = `
       SELECT o.*,
-             u.name  AS customer_name,
+             COALESCE(u.name, o.address->>'name') AS customer_name,
              u.email AS customer_email,
-             u.phone AS customer_phone
+             COALESCE(u.phone, o.address->>'phone') AS customer_phone
       ${baseSql}
       ORDER BY o.created_at DESC
       LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}
@@ -513,7 +513,8 @@ export async function getOrders(req, res) {
 export async function getOrder(req, res) {
   try {
     const { rows } = await query(
-      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.phone as customer_phone
+      `SELECT o.*, COALESCE(u.name, o.address->>'name') as customer_name, u.email as customer_email,
+              COALESCE(u.phone, o.address->>'phone') as customer_phone
        FROM orders o LEFT JOIN users u ON o.user_id=u.id WHERE o.id=$1`,
       [req.params.id]
     )

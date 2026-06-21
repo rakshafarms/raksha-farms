@@ -87,7 +87,7 @@ export async function getDashboardStats(req, res) {
       query(`
         SELECT o.id, o.total, o.status, o.payment_method,
                o.created_at,
-               u.name AS customer_name,
+               COALESCE(u.name, o.address->>'name') AS customer_name,
                u.email AS customer_email
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
