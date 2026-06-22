@@ -22,12 +22,6 @@ function Stars({ rating = 4.8 }) {
   )
 }
 
-function seededRating(id) {
-  if (!id) return 4.8
-  const seed = String(id).split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  return [4.7, 4.8, 4.9, 5.0, 4.6, 4.8, 4.9, 4.7, 5.0, 4.8][seed % 10]
-}
-
 export default function ProductCard({ product }) {
   const { cart, addToCart, updateQuantity, openDrawer } = useCart()
   const { isWishlisted, toggleWishlist } = useWishlist()
@@ -40,8 +34,10 @@ export default function ProductCard({ product }) {
     product.variants ? product.variants[0] : null
   )
 
-  const activePrice    = selectedVariant ? selectedVariant.price : product.price
-  const offerPrice     = !selectedVariant && product.offer_price ? Number(product.offer_price) : null
+  const activePrice    = Number(selectedVariant ? selectedVariant.price : product.price)
+  const offerPrice     = selectedVariant
+    ? (selectedVariant.offer_price && Number(selectedVariant.offer_price) > 0 ? Number(selectedVariant.offer_price) : null)
+    : (product.offer_price && Number(product.offer_price) > 0 ? Number(product.offer_price) : null)
   const displayPrice   = offerPrice ?? activePrice
   const discountPct    = offerPrice ? Math.round((1 - offerPrice / activePrice) * 100) : 0
   const activeUnit  = selectedVariant ? selectedVariant.label : product.unit
@@ -53,7 +49,8 @@ export default function ProductCard({ product }) {
   const isOutOfStock = product.stock === 0
   const isLowStock   = product.stock > 0 && product.stock <= 5
   const wishlisted   = isWishlisted(product.id)
-  const rating       = seededRating(product.id)
+  const rating       = product.avg_rating
+  const reviewCount  = product.review_count || 0
 
   function handleAdd() {
     if (isOutOfStock) return
@@ -154,10 +151,16 @@ export default function ProductCard({ product }) {
 
       {/* Content */}
       <div className="p-2.5 sm:p-3.5 flex flex-col flex-1">
-        {/* Rating */}
-        <div className="flex items-center gap-1 mb-1">
-          <Stars rating={rating} />
-          <span className="text-[10px] text-gray-400 font-medium">({rating.toFixed(1)})</span>
+        {/* Rating — only shown once the product has real reviews */}
+        <div className="flex items-center gap-1 mb-1 min-h-[14px]">
+          {rating != null ? (
+            <>
+              <Stars rating={rating} />
+              <span className="text-[10px] text-gray-400 font-medium">({rating.toFixed(1)}) · {reviewCount}</span>
+            </>
+          ) : (
+            <span className="text-[10px] text-gray-300 font-medium">No reviews yet</span>
+          )}
         </div>
 
         {/* Name */}

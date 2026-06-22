@@ -79,6 +79,8 @@ export async function initDb() {
     await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS max_discount DECIMAL(10,2)`).catch(()=>{})
     await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS description VARCHAR(200)`).catch(()=>{})
     await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS first_order_only BOOLEAN DEFAULT false`).catch(()=>{})
+    // Category-restricted coupons — NULL means the coupon applies to the whole cart
+    await query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS category VARCHAR(50)`).catch(()=>{})
 
     // Subscription plans — defined by admin (daily, weekly, monthly, custom, etc.)
     await query(`
@@ -269,6 +271,24 @@ export async function initDb() {
 
     // Organic flag — only products explicitly marked organic show the organic badge
     await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_organic BOOLEAN DEFAULT false`).catch(() => {})
+
+    // Product reviews/ratings — one review per (product, user); guests have user_id=NULL
+    await query(`
+      CREATE TABLE IF NOT EXISTS product_reviews (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id  UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+        name        VARCHAR(100) NOT NULL,
+        rating      INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        comment     TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {})
+    await query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_review_user_product
+        ON product_reviews (product_id, user_id) WHERE user_id IS NOT NULL
+    `).catch(() => {})
 
     // Saved addresses table — allows users to save multiple named addresses
     await query(`

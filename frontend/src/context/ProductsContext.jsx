@@ -43,9 +43,9 @@ export function ProductsProvider({ children }) {
         stock:       Number(p.stock),
         image:       normalizeImg(p.image_url),
         featured:    p.is_featured || false,
-        organic:     true,
-        rating:      4.7,
-        reviews:     42,
+        is_organic:  p.is_organic || false,
+        avg_rating:  p.avg_rating != null ? Number(p.avg_rating) : null,
+        review_count: p.review_count ? Number(p.review_count) : 0,
         variants:    Array.isArray(p.variants) ? p.variants : [],
         images:      Array.isArray(p.images)
           ? p.images.map(normalizeImg).filter(Boolean)

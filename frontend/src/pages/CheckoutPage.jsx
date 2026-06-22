@@ -134,7 +134,10 @@ export default function CheckoutPage() {
       const res = await fetch(BACKEND_URL + '/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: trimmed, order_total: totalPrice, user_id: user?.id || null, email: user?.email || form.email || '' }),
+        body: JSON.stringify({
+          code: trimmed, order_total: totalPrice, user_id: user?.id || null, email: user?.email || form.email || '',
+          items: cart.map(i => ({ category: i.category, price: i.price, quantity: i.quantity })),
+        }),
       })
       const data = await res.json()
       if (!res.ok) { setCouponError(data.error || 'Invalid coupon'); return }
@@ -1009,6 +1012,7 @@ export default function CheckoutPage() {
                                     ? (c.value + '% off' + (c.max_discount ? ' (max ₹' + c.max_discount + ')' : ''))
                                     : ('₹' + c.value + ' off')}
                                   {c.min_order > 0 ? (' · Min ₹' + c.min_order) : ''}
+                                  {c.category ? (' · ' + c.category + ' only') : ''}
                                 </p>
                                 {c.description && <p className="text-[10px] text-gray-400 truncate">{c.description}</p>}
                               </div>

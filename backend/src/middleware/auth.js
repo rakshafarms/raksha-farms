@@ -21,6 +21,19 @@ export function verifyToken(req, res, next) {
   }
 }
 
+// Attaches req.user if a valid token is present, but never blocks the
+// request — used for routes that work for both guests and logged-in users
+// (e.g. submitting a product review).
+export function optionalAuth(req, res, next) {
+  const authHeader = req.headers.authorization
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      req.user = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET)
+    } catch { /* ignore invalid/expired token — proceed as guest */ }
+  }
+  next()
+}
+
 export function isAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' })

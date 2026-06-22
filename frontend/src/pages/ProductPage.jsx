@@ -4,10 +4,12 @@ import { useProducts } from '../context/ProductsContext'
 import { useCart } from '../context/CartContext'
 import { useWishlist } from '../context/WishlistContext'
 import { useToast } from '../context/ToastContext'
+import { useAuth } from '../context/AuthContext'
 import ProductCard from '../components/ProductCard'
 import RecentlyViewedItems, { rememberProductView } from '../components/RecentlyViewedItems'
 import { ProductDetailSkeleton } from '../components/ProductSkeleton'
 import SubscriptionSheet from '../components/SubscriptionSheet'
+import ProductReviews from '../components/ProductReviews'
 
 function Stars({ rating }) {
   return (
@@ -53,8 +55,10 @@ export default function ProductPage() {
   ].filter(Boolean)
   const [activeImg, setActiveImg] = useState(0)
 
-  const activePrice  = selectedVariant?.price ?? product?.price
-  const offerPrice   = !selectedVariant && product?.offer_price ? Number(product.offer_price) : null
+  const activePrice  = Number(selectedVariant?.price ?? product?.price)
+  const offerPrice   = selectedVariant
+    ? (selectedVariant.offer_price && Number(selectedVariant.offer_price) > 0 ? Number(selectedVariant.offer_price) : null)
+    : (product?.offer_price && Number(product.offer_price) > 0 ? Number(product.offer_price) : null)
   const displayPrice = offerPrice ?? activePrice
   const discountPct  = offerPrice ? Math.round((1 - offerPrice / activePrice) * 100) : 0
   const activeUnit  = selectedVariant?.label ?? product?.unit
@@ -86,7 +90,8 @@ export default function ProductPage() {
 
   const isOutOfStock = product.stock === 0
   const isLowStock   = product.stock > 0 && product.stock <= 5
-  const rating       = 4.8
+  const rating       = product.avg_rating
+  const reviewCount  = product.review_count || 0
 
   function handleAddToCart() {
     if (isOutOfStock) return
@@ -209,8 +214,14 @@ export default function ProductPage() {
 
           {/* Rating */}
           <div className="flex items-center gap-2 mb-4">
-            <Stars rating={rating} />
-            <span className="text-sm text-gray-500 font-medium">{rating} · 128 reviews</span>
+            {rating != null ? (
+              <>
+                <Stars rating={rating} />
+                <span className="text-sm text-gray-500 font-medium">{rating} · {reviewCount} review{reviewCount !== 1 ? 's' : ''}</span>
+              </>
+            ) : (
+              <span className="text-sm text-gray-400 font-medium">No reviews yet — be the first!</span>
+            )}
           </div>
 
           {/* Price */}
@@ -348,6 +359,9 @@ export default function ProductPage() {
           </div>
         </div>
       </div>
+
+      {/* Reviews & ratings */}
+      <ProductReviews productId={product.id} />
 
       {/* Related products */}
       {related.length > 0 && (

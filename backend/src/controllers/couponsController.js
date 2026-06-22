@@ -30,7 +30,7 @@ export async function getAvailableCoupons(req, res) {
   try {
     const { rows } = await query(`
       SELECT id, code, type, value, min_order, max_discount, expires_at, description, first_order_only,
-             max_uses, used_count
+             max_uses, used_count, category
       FROM coupons
       WHERE is_active = true
         AND (expires_at IS NULL OR expires_at > NOW())
@@ -44,11 +44,11 @@ export async function getAvailableCoupons(req, res) {
 /* ── Admin: create ── */
 export async function createCoupon(req, res) {
   try {
-    const { code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only } = req.body
+    const { code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only, category } = req.body
     if (!code || !type || value === undefined) return res.status(400).json({ error: 'code, type, and value are required' })
     const { rows } = await query(
-      `INSERT INTO coupons (code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO coupons (code, type, value, min_order, max_discount, max_uses, expires_at, description, first_order_only, category)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         code.toUpperCase(), type, value,
         min_order   || 0,
@@ -57,6 +57,7 @@ export async function createCoupon(req, res) {
         expires_at  || null,
         description || null,
         first_order_only === true || first_order_only === 'true',
+        category || null,
       ]
     )
     res.status(201).json(rows[0])
@@ -69,12 +70,12 @@ export async function createCoupon(req, res) {
 /* ── Admin: update ── */
 export async function updateCoupon(req, res) {
   try {
-    const { type, value, min_order, max_discount, max_uses, expires_at, is_active, description, first_order_only } = req.body
+    const { type, value, min_order, max_discount, max_uses, expires_at, is_active, description, first_order_only, category } = req.body
     const { rows } = await query(
       `UPDATE coupons
        SET type=$1, value=$2, min_order=$3, max_discount=$4, max_uses=$5,
-           expires_at=$6, is_active=$7, description=$8, first_order_only=$9
-       WHERE id=$10 RETURNING *`,
+           expires_at=$6, is_active=$7, description=$8, first_order_only=$9, category=$10
+       WHERE id=$11 RETURNING *`,
       [
         type, value, min_order,
         max_discount || null,
@@ -83,6 +84,7 @@ export async function updateCoupon(req, res) {
         is_active,
         description || null,
         first_order_only === true || first_order_only === 'true',
+        category || null,
         req.params.id,
       ]
     )
@@ -114,7 +116,7 @@ export async function deleteCoupon(req, res) {
 /* ── Public: validate coupon ── */
 export async function validateCoupon(req, res) {
   try {
-    const { code, order_total, user_id } = req.body
+    const { code, order_total, user_id, items } = req.body
     if (!code) return res.status(400).json({ error: 'code is required' })
     const { rows } = await query(
       `SELECT * FROM coupons WHERE code=$1 AND is_active=true
@@ -125,8 +127,26 @@ export async function validateCoupon(req, res) {
     if (!rows[0]) return res.status(400).json({ error: 'Invalid or expired coupon' })
     const coupon = rows[0]
 
-    if (order_total < Number(coupon.min_order))
-      return res.status(400).json({ error: `Minimum order ₹${coupon.min_order} required` })
+    // Category-restricted coupons only discount items from that category —
+    // the cart's full total is irrelevant to min_order / discount calc here.
+    let applicableTotal = Number(order_total)
+    if (coupon.category) {
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ error: `This coupon only applies to ${coupon.category} products` })
+      }
+      applicableTotal = items
+        .filter(i => String(i.category || '').toLowerCase() === coupon.category.toLowerCase())
+        .reduce((sum, i) => sum + Number(i.price || 0) * Number(i.quantity || 1), 0)
+      if (applicableTotal <= 0)
+        return res.status(400).json({ error: `This coupon only applies to ${coupon.category} products — add some to your cart` })
+    }
+
+    if (applicableTotal < Number(coupon.min_order))
+      return res.status(400).json({
+        error: coupon.category
+          ? `Minimum ₹${coupon.min_order} of ${coupon.category} products required`
+          : `Minimum order ₹${coupon.min_order} required`
+      })
 
     // Check first_order_only — check by user_id OR by email in address JSON
     if (coupon.first_order_only) {
@@ -149,7 +169,7 @@ export async function validateCoupon(req, res) {
         return res.status(400).json({ error: 'This coupon is valid for first order only' })
     }
 
-    const discount = calcDiscount(coupon, order_total)
+    const discount = calcDiscount(coupon, applicableTotal)
     res.json({ valid: true, discount, coupon })
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

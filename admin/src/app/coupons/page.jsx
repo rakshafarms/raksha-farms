@@ -1,13 +1,13 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
-import { couponsAPI } from '../../lib/api'
+import { couponsAPI, categoriesAPI } from '../../lib/api'
 import { Plus, Trash2, Pencil, X, ToggleLeft, ToggleRight, Shuffle, Tag, TrendingUp, Clock, Users } from 'lucide-react'
 
 const EMPTY = {
   code: '', type: 'percent', value: '', min_order: '0',
   max_discount: '', max_uses: '100', expires_at: '',
-  description: '', first_order_only: false,
+  description: '', first_order_only: false, category: '',
 }
 
 function randomCode() {
@@ -52,11 +52,15 @@ export default function CouponsPage() {
   const [toggling, setToggling] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [filter, setFilter] = useState('all') // all | active | inactive | expired
+  const [categories, setCategories] = useState([])
 
   async function load() {
     try { const { data } = await couponsAPI.getAll(); setCoupons(Array.isArray(data) ? data : []) } catch(e) { console.error(e) }
   }
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    categoriesAPI.getAll().then(({ data }) => setCategories(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
 
   function openAdd() { setEditing(null); setForm(EMPTY); setShowModal(true) }
   function openEdit(c) {
@@ -69,6 +73,7 @@ export default function CouponsPage() {
       expires_at: c.expires_at ? c.expires_at.split('T')[0] : '',
       description: c.description ?? '',
       first_order_only: c.first_order_only ?? false,
+      category: c.category ?? '',
     })
     setShowModal(true)
   }
@@ -186,6 +191,11 @@ export default function CouponsPage() {
                       {c.first_order_only && (
                         <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full flex items-center gap-1">
                           <Users size={9}/> New users
+                        </span>
+                      )}
+                      {c.category && (
+                        <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full capitalize">
+                          {c.category} only
                         </span>
                       )}
                     </div>
@@ -337,6 +347,18 @@ export default function CouponsPage() {
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
                 </div>
+
+                {/* Category restriction */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Applies To <span className="text-gray-400 font-normal text-xs">— restrict discount to one category's items only</span>
+                  </label>
+                  <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]">
+                    <option value="">All categories (whole cart)</option>
+                    {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* First order only toggle */}
@@ -361,6 +383,7 @@ export default function CouponsPage() {
                     : `₹${form.value} flat discount`}
                   {form.min_order > 0 ? ` on orders above ₹${form.min_order}` : ' on any order'}
                   {form.first_order_only ? ' · First order only' : ''}
+                  {form.category ? ` · Only on ${categories.find(c => c.slug === form.category)?.name || form.category}` : ''}
                 </div>
               )}
 

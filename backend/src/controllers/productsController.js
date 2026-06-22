@@ -15,7 +15,13 @@ export async function getProducts(req, res) {
     if (search)   { params.push(`%${search}%`);  where += ` AND (name ILIKE $${params.length} OR category ILIKE $${params.length})` }
 
     const { rows } = await query(
-      `SELECT * FROM products ${where} ORDER BY created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+      `SELECT p.*, COALESCE(r.avg_rating, NULL) AS avg_rating, COALESCE(r.review_count, 0) AS review_count
+       FROM products p
+       LEFT JOIN (
+         SELECT product_id, ROUND(AVG(rating)::numeric, 1) AS avg_rating, COUNT(*) AS review_count
+         FROM product_reviews GROUP BY product_id
+       ) r ON r.product_id = p.id
+       ${where} ORDER BY p.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
       [...params, limit, offset]
     )
     const cnt = await query(`SELECT COUNT(*) FROM products ${where}`, params)
@@ -51,7 +57,16 @@ export async function getProductsAdmin(req, res) {
 
 export async function getProduct(req, res) {
   try {
-    const { rows } = await query('SELECT * FROM products WHERE id=$1', [req.params.id])
+    const { rows } = await query(
+      `SELECT p.*, COALESCE(r.avg_rating, NULL) AS avg_rating, COALESCE(r.review_count, 0) AS review_count
+       FROM products p
+       LEFT JOIN (
+         SELECT product_id, ROUND(AVG(rating)::numeric, 1) AS avg_rating, COUNT(*) AS review_count
+         FROM product_reviews GROUP BY product_id
+       ) r ON r.product_id = p.id
+       WHERE p.id=$1`,
+      [req.params.id]
+    )
     if (!rows[0]) return res.status(404).json({ error: 'Product not found' })
     res.json(rows[0])
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
