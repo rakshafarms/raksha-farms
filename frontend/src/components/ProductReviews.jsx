@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useProducts } from '../context/ProductsContext'
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -27,6 +28,7 @@ function StarRow({ rating, size = 'w-4 h-4', onPick = null }) {
 export default function ProductReviews({ productId }) {
   const { user, isLoggedIn } = useAuth()
   const { addToast } = useToast()
+  const { updateProduct } = useProducts()
 
   const [reviews, setReviews]     = useState([])
   const [avgRating, setAvgRating] = useState(null)
@@ -47,6 +49,10 @@ export default function ProductReviews({ productId }) {
       setReviews(data.reviews || [])
       setAvgRating(data.avg_rating)
       setCount(data.review_count || 0)
+      // Sync into the shared product list so every ProductCard (homepage,
+      // related products, etc.) reflects the latest rating immediately —
+      // not just this detail page, which fetches reviews independently.
+      updateProduct(productId, { avg_rating: data.avg_rating, review_count: data.review_count || 0 })
     } catch { /* keep previous state on transient failure */ }
     finally { setLoading(false) }
   }
