@@ -62,6 +62,13 @@ const products = [
 ]
 
 async function reseed() {
+  // Safety guard — this script DELETEs every product. Never let it run
+  // against production by accident; require an explicit opt-in env var.
+  if (process.env.NODE_ENV === 'production' && process.env.FORCE_SEED !== 'true') {
+    console.error('❌ Refusing to run: NODE_ENV=production. This would DELETE all live products.')
+    console.error('   If you really mean to wipe production, re-run with FORCE_SEED=true.')
+    process.exit(1)
+  }
   console.log('🧹 Clearing old products...')
   try {
     // Remove old products (cascade removes subscriptions/inventory_logs)
