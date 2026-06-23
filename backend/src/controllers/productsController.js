@@ -298,6 +298,17 @@ function bool(v, fallback = true) {
   return fallback
 }
 
+// Coerce any value into a string safe to bind to a JSONB column.
+// pg returns JSONB columns as JS arrays/objects; binding those straight back
+// makes node-postgres emit a Postgres array literal ({...}) instead of JSON,
+// which Postgres rejects as "invalid input syntax for type json". Always
+// stringify non-string values; pass strings through (already JSON text).
+function toJsonb(v, fallback = '[]') {
+  if (v === undefined || v === null) return fallback
+  if (typeof v === 'string') return v.trim() === '' ? fallback : v
+  try { return JSON.stringify(v) } catch { return fallback }
+}
+
 export async function bulkImportProducts(req, res) {
   const client = await pool.connect()
   let rowIdx = 0
@@ -316,6 +327,10 @@ export async function bulkImportProducts(req, res) {
     for (let i = 0; i < rows.length; i++) {
       rowIdx = i + 2 // +2 because row 1 is the header in Excel
       const row = rows[i] || {}
+      // Per-row SAVEPOINT: if one row hits a DB error, roll back only that
+      // row instead of poisoning the whole transaction (which would cascade
+      // "current transaction is aborted" onto every remaining row).
+      await client.query('SAVEPOINT row_sp')
       try {
         const id           = String(row.id || '').trim() || null
         const name         = String(row.name || '').trim()
@@ -368,15 +383,16 @@ export async function bulkImportProducts(req, res) {
           const finalUnit        = unit !== null ? unit : existing.unit
           // Image: only replace if a new URL was provided AND downloaded successfully
           const finalCover       = imageUrlRaw ? (newCoverPath || existing.image_url) : existing.image_url
-          // Gallery: only replace if at least one new URL was provided
+          // Gallery: only replace if at least one new URL was provided.
+          // toJsonb() guards against pg handing back a JS array for existing.images.
           const finalGallery     = galleryItems.length > 0
             ? JSON.stringify(newGalleryPaths)
-            : existing.images
+            : toJsonb(existing.images)
           // is_active / is_featured / is_organic: only apply if cell is non-blank
           const finalActive      = row.is_active   !== undefined && row.is_active   !== '' ? isActive   : existing.is_active
           const finalFeatured    = row.is_featured !== undefined && row.is_featured !== '' ? isFeatured : existing.is_featured
           const finalOrganic     = row.is_organic  !== undefined && row.is_organic  !== '' ? isOrganic  : (existing.is_organic || false)
-          const finalVariants    = variantsRaw !== null ? JSON.stringify(variantsRaw) : existing.variants
+          const finalVariants    = variantsRaw !== null ? JSON.stringify(variantsRaw) : toJsonb(existing.variants)
 
           const prevStock = Number(existing.stock || 0)
 
@@ -415,6 +431,7 @@ export async function bulkImportProducts(req, res) {
               name,
               reason: `Missing required field${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
             })
+            await client.query('RELEASE SAVEPOINT row_sp')
             continue
           }
           const finalStock = stock !== null ? stock : 0
@@ -425,11 +442,15 @@ export async function bulkImportProducts(req, res) {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [name, category, description, price, offer_price, finalStock, unit,
              newCoverPath, JSON.stringify(newGalleryPaths), isActive, isFeatured,
-             isOrganic, variantsRaw !== null ? JSON.stringify(variantsRaw) : '[]']
+             isOrganic, variantsRaw !== null ? toJsonb(variantsRaw) : '[]']
           )
           summary.created++
         }
+        // Row succeeded — discard its savepoint so the work stays committed.
+        await client.query('RELEASE SAVEPOINT row_sp')
       } catch (err) {
+        // Roll back just this row; the transaction stays usable for the rest.
+        await client.query('ROLLBACK TO SAVEPOINT row_sp').catch(() => {})
         summary.errors.push({ row: rowIdx, name: row.name || '', error: err.message })
       }
     }
