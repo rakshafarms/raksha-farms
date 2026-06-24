@@ -661,55 +661,52 @@ export default function BillingPage() {
 // any weight/volume even if no variants are configured on the product.
 const UNIT_CHIPS = ['100g','250g','500g','1kg','2kg','200mL','500mL','1L','pcs']
 
-// Whether the product's base price is "per kg" or "per litre" — lets us
-// auto-calculate the price for a chosen weight/volume chip (e.g. 250g of a
-// ₹40/kg vegetable = ₹10) instead of always showing the full per-kg price.
-function getBaseKind(productUnit) {
-  const u = String(productUnit || '').toLowerCase().trim()
-  if (u === 'kg' || u === 'g' || u.includes('gram') || u.includes('kilogram')) return 'weight'
-  if (u === 'l' || u === 'litre' || u === 'liter' || u === 'ml') return 'volume'
+// Parse a unit string into a normalized measure so the chosen size can be
+// scaled against the product's actual base unit. Weight → grams, volume → mL.
+// Handles bare units ("kg", "litre") and quantified units ("250g", "1kg",
+// "500mL", "2L"). Returns null for non-scalable units (pcs, dozen, bunch…).
+function parseMeasure(str) {
+  // Strip any parenthetical note e.g. "1kg (4-6 pcs)" → "1kg"
+  const s = String(str || '').split('(')[0].trim().toLowerCase()
+  if (!s) return null
+  const m = s.match(/^(\d*\.?\d*)\s*(kg|kgs|kilogram|kilograms|g|gm|gms|gram|grams|ml|millilitre|millilitres|milliliter|milliliters|l|lt|ltr|litre|litres|liter|liters)$/i)
+  if (!m) return null
+  const qty = m[1] === '' ? 1 : parseFloat(m[1])
+  if (isNaN(qty) || qty <= 0) return null
+  const unit = m[2]
+  const WEIGHT = { kg:1000, kgs:1000, kilogram:1000, kilograms:1000, g:1, gm:1, gms:1, gram:1, grams:1 }
+  const VOLUME = { ml:1, millilitre:1, millilitres:1, milliliter:1, milliliters:1, l:1000, lt:1000, ltr:1000, litre:1000, litres:1000, liter:1000, liters:1000 }
+  if (unit in WEIGHT) return { kind: 'weight', amount: qty * WEIGHT[unit] }
+  if (unit in VOLUME) return { kind: 'volume', amount: qty * VOLUME[unit] }
   return null
 }
 
-// Parses a chip/typed value like "250g", "1kg", "500mL" into a ratio against
-// the base unit (1kg or 1L). Returns null if it can't be parsed or the unit
-// type (weight vs volume) doesn't match the product's base kind.
-function unitRatio(str, baseKind) {
-  if (!baseKind) return null
-  const m = String(str).trim().match(/^(\d*\.?\d+)\s*(kg|g|ml|l|litre|liter)?$/i)
-  if (!m) return null
-  const num = parseFloat(m[1])
-  if (isNaN(num)) return null
-  const unit = (m[2] || '').toLowerCase()
-  if (baseKind === 'weight') {
-    if (unit === 'kg') return num
-    if (unit === 'g')  return num / 1000
-    return null
-  }
-  if (baseKind === 'volume') {
-    if (unit === 'l' || unit === 'litre' || unit === 'liter') return num
-    if (unit === 'ml') return num / 1000
-    return null
-  }
-  return null
+// Price ratio of a chosen unit relative to the product's base unit — only
+// when both are the same measurable kind. e.g. base "250g" + chosen "500g"
+// → 2.0; base "kg" + chosen "250g" → 0.25. null = can't auto-scale.
+function priceRatio(baseUnit, chosenUnit) {
+  const base   = parseMeasure(baseUnit)
+  const chosen = parseMeasure(chosenUnit)
+  if (!base || !chosen || base.kind !== chosen.kind || base.amount <= 0) return null
+  return chosen.amount / base.amount
 }
 
 function VariantPicker({ product, variants, cart, onClose, onAdd }) {
   const basePrice = product.offer_price && Number(product.offer_price) > 0
     ? Number(product.offer_price) : Number(product.price)
-  const baseKind = getBaseKind(product.unit)
 
   const [customUnit,  setCustomUnit]  = useState(product.unit || '250g')
   const [customPrice, setCustomPrice] = useState(String(basePrice))
 
-  // Recalculate price proportionally whenever the chosen unit changes —
-  // e.g. picking "250g" on a ₹40/kg vegetable auto-fills ₹10. Admin can
-  // still edit the price field manually afterwards (for negotiated rates).
+  // Recalculate price proportionally whenever the chosen unit changes,
+  // scaled against the product's REAL base unit — so 500g of a ₹80/250g
+  // item becomes ₹160, and 250g of a ₹40/kg item becomes ₹10. Admin can
+  // still edit the price field manually afterwards (negotiated rates).
   useEffect(() => {
-    const ratio = unitRatio(customUnit, baseKind)
+    const ratio = priceRatio(product.unit, customUnit)
     if (ratio === null) return
     setCustomPrice(String(Math.round(basePrice * ratio * 100) / 100))
-  }, [customUnit, baseKind, basePrice])
+  }, [customUnit, basePrice, product.unit])
 
   return (
     <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center"
