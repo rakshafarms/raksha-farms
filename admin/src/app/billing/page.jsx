@@ -236,8 +236,10 @@ export default function BillingPage() {
     ${snap.map(i => `
       <div style="margin:5px 0">
         <div class="item-name">${i.name}</div>
-        ${i.unit ? `<div class="item-unit">${i.unit}</div>` : ''}
-        <div class="row"><span></span><span>${i.qty} × ${fmtRs(i.price)}</span><span class="right bold">${fmtRs(i.price*i.qty)}</span></div>
+        <div class="row">
+          <span>${i.qty} × ${i.unit || 'unit'} @ ${fmtRs(i.price)}</span>
+          <span class="right bold">${fmtRs(i.price * i.qty)}</span>
+        </div>
       </div>`).join('')}
     <hr class="divider"/>
     <div class="row"><span>Subtotal</span><span>${fmtRs(sub)}</span></div>
@@ -661,6 +663,19 @@ export default function BillingPage() {
 // any weight/volume even if no variants are configured on the product.
 const UNIT_CHIPS = ['100g','250g','500g','1kg','2kg','200mL','500mL','1L','pcs']
 
+// Normalize a product's stored base unit to the nearest chip so the picker
+// opens with a chip highlighted rather than a blank "other" field.
+// e.g. "kg" → "1kg", "litre" → "1L", "g" → "100g"
+function normalizeDefaultUnit(unit) {
+  const u = String(unit || '').trim().toLowerCase()
+  if (!u) return '1kg'
+  if (/^(kg|kgs|kilogram|kilograms)$/.test(u)) return '1kg'
+  if (/^(l|lt|ltr|litre|litres|liter|liters)$/.test(u)) return '1L'
+  if (/^(g|gm|gms|gram|grams)$/.test(u)) return '100g'
+  if (/^(ml|millilitre|millilitres|milliliter|milliliters)$/.test(u)) return '200mL'
+  return unit
+}
+
 // Parse a unit string into a normalized measure so the chosen size can be
 // scaled against the product's actual base unit. Weight → grams, volume → mL.
 // Handles bare units ("kg", "litre") and quantified units ("250g", "1kg",
@@ -695,7 +710,7 @@ function VariantPicker({ product, variants, cart, onClose, onAdd }) {
   const basePrice = product.offer_price && Number(product.offer_price) > 0
     ? Number(product.offer_price) : Number(product.price)
 
-  const [customUnit,  setCustomUnit]  = useState(product.unit || '250g')
+  const [customUnit,  setCustomUnit]  = useState(normalizeDefaultUnit(product.unit))
   const [customPrice, setCustomPrice] = useState(String(basePrice))
 
   // Recalculate price proportionally whenever the chosen unit changes,

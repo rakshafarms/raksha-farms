@@ -90,9 +90,8 @@ function printOrderBill(o) {
   const itemRows = items.map(i => `
     <div style="margin:6px 0">
       <div style="font-weight:600;font-size:13px">${i.emoji || ''} ${i.name}</div>
-      ${i.unit ? `<div style="font-size:11px;color:#666">${i.unit}</div>` : ''}
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:2px">
-        <span>${i.quantity} × ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
+        <span>${i.quantity} × ${i.unit || 'unit'} @ ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
         <span style="font-weight:700">₹${(Number(i.price||0)*Number(i.quantity||1)).toLocaleString('en-IN')}</span>
       </div>
     </div>`).join('')
