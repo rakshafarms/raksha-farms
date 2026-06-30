@@ -208,47 +208,50 @@ export default function BillingPage() {
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Receipt ${r.reference_id}</title>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:'Courier New',monospace;font-size:13px;padding:20px;width:320px;color:#111}
-      .center{text-align:center} .right{text-align:right} .bold{font-weight:700}
-      .logo{font-size:18px;font-weight:700;letter-spacing:1px}
-      .divider{border:none;border-top:1px dashed #999;margin:10px 0}
-      .row{display:flex;justify-content:space-between;margin:3px 0}
-      .item-name{font-weight:600} .item-unit{font-size:11px;color:#666}
-      .total-row{display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px;padding-top:6px;border-top:2px solid #111}
-      .footer{margin-top:14px;text-align:center;font-size:11px;color:#666;line-height:1.6}
+      body{font-family:'Courier New',monospace;font-size:14px;padding:20px;width:320px;color:#000;font-weight:600}
+      .center{text-align:center} .right{text-align:right}
+      .logo{font-size:20px;font-weight:800;letter-spacing:1px}
+      .divider{border:none;border-top:2px dashed #000;margin:10px 0}
+      .row{display:flex;justify-content:space-between;margin:4px 0;font-weight:600}
+      .label{font-weight:700;font-size:12px}
+      .value{font-weight:800}
+      .item-name{font-weight:800;font-size:14px;margin-bottom:2px}
+      .item-detail{font-size:13px;font-weight:700}
+      .total-row{display:flex;justify-content:space-between;font-size:18px;font-weight:900;margin-top:8px;padding-top:8px;border-top:3px solid #000}
+      .footer{margin-top:14px;text-align:center;font-size:12px;font-weight:700;color:#000;line-height:1.7}
+      @media print{body{padding:12px}}
     </style></head><body>
     <div class="center" style="margin-bottom:6px">
       <img src="${logoUrl}" alt="Raksha Farms" style="width:150px;height:auto;display:block;margin:0 auto"
         onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'"/>
-      <p id="logo-fallback" class="logo" style="display:none">🌿 Raksha Farms</p>
+      <p id="logo-fallback" class="logo" style="display:none">Raksha Farms</p>
     </div>
-    <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
+    <p class="center" style="font-size:12px;font-weight:700;margin-top:2px">Fresh · Pure · Organic</p>
     <hr class="divider"/>
-    <div class="row"><span>Bill No</span><span class="bold">${r.reference_id}</span></div>
-    <div class="row"><span>Date &amp; Time</span><span>${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour12:true})}</span></div>
-    <div class="row"><span>Customer</span><span class="bold">${r.customerName}</span></div>
-    ${r.customerPhone ? `<div class="row"><span>Phone</span><span>${r.customerPhone}</span></div>` : ''}
-    ${r.deliveryAddr ? `<div style="display:flex;justify-content:space-between;margin:3px 0;align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px;line-height:1.4">${r.deliveryAddr}</span></div>` : ''}
-    <div class="row"><span>Payment</span><span class="bold">${r.payMethod.toUpperCase()}</span></div>
+    <div class="row"><span class="label">Bill No</span><span class="value">${r.reference_id}</span></div>
+    <div class="row"><span class="label">Date &amp; Time</span><span class="value">${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour12:true})}</span></div>
+    <div class="row"><span class="label">Customer</span><span class="value">${r.customerName}</span></div>
+    ${r.customerPhone ? `<div class="row"><span class="label">Phone</span><span class="value">${r.customerPhone}</span></div>` : ''}
+    ${r.deliveryAddr ? `<div class="row" style="align-items:flex-start"><span class="label">Address</span><span class="value" style="text-align:right;max-width:180px;font-size:12px;line-height:1.5">${r.deliveryAddr}</span></div>` : ''}
+    <div class="row"><span class="label">Payment</span><span class="value">${r.payMethod.toUpperCase()}</span></div>
     <hr class="divider"/>
-    <div class="row bold"><span>Item</span><span>Qty × Rate</span><span class="right">Amt</span></div>
+    <div class="row" style="font-size:12px;font-weight:900;text-transform:uppercase"><span>ITEMS</span></div>
     <hr class="divider"/>
     ${snap.map(i => `
-      <div style="margin:5px 0">
+      <div style="margin:7px 0">
         <div class="item-name">${i.name}</div>
-        <div class="row">
+        <div class="row item-detail">
           <span>${i.qty} × ${i.unit || 'unit'} @ ${fmtRs(i.price)}</span>
-          <span class="right bold">${fmtRs(i.price * i.qty)}</span>
+          <span>${fmtRs(i.price * i.qty)}</span>
         </div>
       </div>`).join('')}
     <hr class="divider"/>
-    <div class="row"><span>Subtotal</span><span>${fmtRs(sub)}</span></div>
-    ${r.discAmt > 0 ? `<div class="row"><span>Discount</span><span>− ${fmtRs(r.discAmt)}</span></div>` : ''}
+    <div class="row"><span class="label">Subtotal</span><span class="value">${fmtRs(sub)}</span></div>
+    ${r.discAmt > 0 ? `<div class="row"><span class="label">Discount</span><span class="value">− ${fmtRs(r.discAmt)}</span></div>` : ''}
     <div class="total-row"><span>TOTAL</span><span>${fmtRs(r.total)}</span></div>
     <div class="footer">
-      Thank you for shopping!<br/>
-      Visit us again 🙏<br/>
-      www.rakshafarms.com
+      Thank you for shopping with us!<br/>
+      Visit us again · www.rakshafarms.com
     </div>
     </body></html>`)
     win.document.close()

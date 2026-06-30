@@ -88,11 +88,11 @@ function printOrderBill(o) {
   const discount = subtotal + fee - Number(o.total || 0)
 
   const itemRows = items.map(i => `
-    <div style="margin:6px 0">
-      <div style="font-weight:600;font-size:13px">${i.emoji || ''} ${i.name}</div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:2px">
+    <div style="margin:7px 0">
+      <div class="item-name">${i.name}</div>
+      <div class="row item-detail">
         <span>${i.quantity} × ${i.unit || 'unit'} @ ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
-        <span style="font-weight:700">₹${(Number(i.price||0)*Number(i.quantity||1)).toLocaleString('en-IN')}</span>
+        <span>₹${(Number(i.price||0)*Number(i.quantity||1)).toLocaleString('en-IN')}</span>
       </div>
     </div>`).join('')
 
@@ -103,43 +103,45 @@ function printOrderBill(o) {
   <title>Bill — ${refId}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Courier New',monospace;font-size:13px;padding:22px;width:340px;color:#111}
-    .center{text-align:center} .right{text-align:right} .bold{font-weight:700}
-    .logo{font-size:20px;font-weight:800;letter-spacing:1px}
-    .divider{border:none;border-top:1px dashed #aaa;margin:10px 0}
-    .row{display:flex;justify-content:space-between;margin:3px 0;font-size:12px}
-    .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-bottom:4px;
-      background:${walkIn ? '#fef3c7' : '#dbeafe'};color:${walkIn ? '#92400e' : '#1e40af'}}
-    .total-row{display:flex;justify-content:space-between;font-size:17px;font-weight:900;margin-top:8px;padding-top:8px;border-top:2px solid #111}
-    .footer{margin-top:16px;text-align:center;font-size:11px;color:#666;line-height:1.7}
-    .status{font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;
-      background:${o.status==='delivered'?'#d1fae5':'#fef9c3'};color:${o.status==='delivered'?'#065f46':'#92400e'}}
+    body{font-family:'Courier New',monospace;font-size:14px;padding:22px;width:340px;color:#000;font-weight:600}
+    .center{text-align:center}
+    .logo{font-size:20px;font-weight:900;letter-spacing:1px}
+    .divider{border:none;border-top:2px dashed #000;margin:10px 0}
+    .row{display:flex;justify-content:space-between;margin:4px 0;font-size:13px;font-weight:600}
+    .label{font-weight:700}
+    .value{font-weight:900}
+    .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:800;margin-bottom:4px;border:1px solid #000}
+    .total-row{display:flex;justify-content:space-between;font-size:18px;font-weight:900;margin-top:8px;padding-top:8px;border-top:3px solid #000}
+    .footer{margin-top:16px;text-align:center;font-size:12px;font-weight:700;color:#000;line-height:1.7}
+    .status{font-size:12px;font-weight:800}
+    .item-name{font-weight:800;font-size:14px;margin-bottom:2px}
+    .item-detail{font-size:13px;font-weight:700}
     @media print{body{padding:12px}}
   </style></head><body>
   <div class="center" style="margin-bottom:6px">
     <img src="${logoUrl}" alt="Raksha Farms" style="width:150px;height:auto;display:block;margin:0 auto"
       onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'"/>
-    <p id="logo-fallback" class="logo" style="display:none">🌿 Raksha Farms</p>
+    <p id="logo-fallback" class="logo" style="display:none">Raksha Farms</p>
   </div>
-  <p class="center" style="font-size:11px;color:#555;margin-top:2px">Fresh · Pure · Organic</p>
-  <p class="center" style="margin-top:4px"><span class="badge">${walkIn ? '🏪 Walk-in / Offline' : '🌐 Online Order'}</span></p>
+  <p class="center" style="font-size:12px;font-weight:700;margin-top:2px">Fresh · Pure · Organic</p>
+  <p class="center" style="margin-top:4px"><span class="badge">${walkIn ? 'Walk-in / Offline' : 'Online Order'}</span></p>
   <hr class="divider"/>
-  <div class="row"><span>Bill No</span><span class="bold">${refId}</span></div>
-  <div class="row"><span>Date</span><span>${dateStr}</span></div>
-  <div class="row"><span>Customer</span><span class="bold">${name}</span></div>
-  ${phone ? `<div class="row"><span>Phone</span><span>${phone}</span></div>` : ''}
-  ${addr.address ? `<div class="row" style="align-items:flex-start"><span>Address</span><span style="text-align:right;max-width:180px;font-size:11px;line-height:1.4">${addr.address}${addr.city?', '+addr.city:''}${addr.pincode?' — '+addr.pincode:''}</span></div>` : ''}
-  <div class="row"><span>Payment</span><span class="bold">${(o.payment_method || 'COD').toUpperCase()}</span></div>
-  <div class="row"><span>Status</span><span class="status">${STATUS_META[o.status]?.label || o.status}</span></div>
+  <div class="row"><span class="label">Bill No</span><span class="value">${refId}</span></div>
+  <div class="row"><span class="label">Date</span><span class="value">${dateStr}</span></div>
+  <div class="row"><span class="label">Customer</span><span class="value">${name}</span></div>
+  ${phone ? `<div class="row"><span class="label">Phone</span><span class="value">${phone}</span></div>` : ''}
+  ${addr.address ? `<div class="row" style="align-items:flex-start"><span class="label">Address</span><span class="value" style="text-align:right;max-width:185px;font-size:12px;line-height:1.5">${addr.address}${addr.city?', '+addr.city:''}${addr.pincode?' — '+addr.pincode:''}</span></div>` : ''}
+  <div class="row"><span class="label">Payment</span><span class="value">${(o.payment_method || 'COD').toUpperCase()}</span></div>
+  <div class="row"><span class="label">Status</span><span class="status">${STATUS_META[o.status]?.label || o.status}</span></div>
   <hr class="divider"/>
-  <div class="bold" style="font-size:11px;margin-bottom:6px">ITEMS</div>
+  <div style="font-size:12px;font-weight:900;text-transform:uppercase;margin-bottom:6px">ITEMS</div>
   ${itemRows}
   <hr class="divider"/>
-  <div class="row"><span>Subtotal</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>
-  ${fee > 0 ? `<div class="row"><span>Delivery Fee</span><span>₹${fee.toLocaleString('en-IN')}</span></div>` : ''}
-  ${discount > 0.5 ? `<div class="row"><span>Discount</span><span>− ₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
+  <div class="row"><span class="label">Subtotal</span><span class="value">₹${subtotal.toLocaleString('en-IN')}</span></div>
+  ${fee > 0 ? `<div class="row"><span class="label">Delivery Fee</span><span class="value">₹${fee.toLocaleString('en-IN')}</span></div>` : ''}
+  ${discount > 0.5 ? `<div class="row"><span class="label">Discount</span><span class="value">− ₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
   <div class="total-row"><span>TOTAL</span><span>₹${Number(o.total||0).toLocaleString('en-IN')}</span></div>
-  <div class="footer">Thank you for shopping with us! 🙏<br/>Visit us again · www.rakshafarms.com</div>
+  <div class="footer">Thank you for shopping with us!<br/>Visit us again · www.rakshafarms.com</div>
   </body></html>`)
   win.document.close()
   win.focus()
