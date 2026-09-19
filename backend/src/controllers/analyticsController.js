@@ -1,4 +1,5 @@
 import { query } from '../config/database.js'
+import { packRatio } from '../utils/measure.js'
 
 export async function getDashboardStats(req, res) {
   try {
@@ -178,5 +179,70 @@ export async function getOrderStatusBreakdown(req, res) {
       FROM orders WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC
     `)
     res.json(rows)
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
+}
+
+// Per-item sales, grouped by category on the client.
+// period: 7 | 30 | 90 | 365 | all  (days, Asia/Kolkata calendar days, inclusive)
+// Items whose product was later deleted are kept under the name saved on the
+// order, so historic sales never vanish from the report.
+export async function getProductSales(req, res) {
+  try {
+    const raw = String(req.query.period ?? '30')
+    const days = raw === 'all' ? null : (['7', '30', '90', '365'].includes(raw) ? Number(raw) : 30)
+    const { rows } = await query(`
+      SELECT
+        COALESCE(p.id::text, 'missing:' || (item->>'name'))  AS key,
+        COALESCE(p.name, item->>'name')                        AS name,
+        COALESCE(p.category, 'other')                          AS category,
+        COALESCE(c.name, INITCAP(COALESCE(p.category, 'other'))) AS category_name,
+        COALESCE(p.unit, item->>'unit', '')                    AS unit,
+        p.image_url,
+        (p.id IS NULL)                                         AS product_missing,
+        COALESCE(item->>'unit', '')                            AS pack_unit,
+        SUM((item->>'quantity')::numeric)                      AS packs,
+        ARRAY_AGG(DISTINCT o.id::text)                         AS order_ids,
+        SUM((item->>'quantity')::numeric * (item->>'price')::numeric) AS revenue
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE jsonb_typeof(o.items) WHEN 'array' THEN o.items ELSE '[]'::jsonb END
+      ) AS item
+      LEFT JOIN products   p ON p.id::text = item->>'id'
+      LEFT JOIN categories c ON c.slug = p.category
+      WHERE o.status NOT IN ('cancelled','rejected')
+        AND o.deleted_at IS NULL
+        AND (item->>'quantity') ~ '^[0-9]+(\.[0-9]+)?$'
+        AND (item->>'price')    ~ '^[0-9]+(\.[0-9]+)?$'
+        AND ($1::int IS NULL
+             OR DATE(o.created_at AT TIME ZONE 'Asia/Kolkata') >= CURRENT_DATE - $1::int)
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    `, [days])
+
+    // One SQL row per (product, pack). Fold them into one row per product,
+    // converting packs to the product's base unit so that 1 × "5.5kg" of a
+    // per-kg item counts as 5.5, and 2 × "250g" counts as 0.5. Packs that
+    // can't be compared with the base unit (pcs, bunch) count as-is.
+    const byProduct = new Map()
+    for (const r of rows) {
+      const ratio = packRatio(r.unit, r.pack_unit) ?? 1
+      let p = byProduct.get(r.key)
+      if (!p) {
+        p = { key: r.key, name: r.name, category: r.category, category_name: r.category_name, unit: r.unit,
+              image_url: r.image_url, product_missing: r.product_missing, units_sold: 0, revenue: 0, orderIds: new Set() }
+        byProduct.set(r.key, p)
+      }
+      p.units_sold += Number(r.packs) * ratio
+      p.revenue    += Number(r.revenue)
+      for (const id of r.order_ids) p.orderIds.add(id)
+    }
+    const result = [...byProduct.values()]
+      .map(({ orderIds, ...p }) => ({
+        ...p,
+        units_sold: Math.round(p.units_sold * 1000) / 1000,
+        revenue:    Math.round(p.revenue * 100) / 100,
+        orders:     orderIds.size,
+      }))
+      .sort((a, b) => a.category_name.localeCompare(b.category_name) || b.revenue - a.revenue)
+    res.json(result)
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }

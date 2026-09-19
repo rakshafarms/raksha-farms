@@ -54,6 +54,7 @@ export const ordersAPI = {
   getOne: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, status, extras = {}) => api.patch(`/orders/${id}/status`, { status, ...extras }),
   softDelete: (id, remarks) => api.delete(`/orders/${id}`, { data: { remarks } }),
+  hardDelete: (id) => api.delete(`/orders/${id}/permanent`),   // only works on orders already soft-deleted
   getStats: () => api.get('/orders/stats'),
   createWalkIn: (data) => api.post('/orders/walkin', data),
   // EventSource uses withCredentials so the admin_token cookie is sent automatically.
@@ -66,6 +67,7 @@ export const analyticsAPI = {
   getDashboard: () => api.get('/analytics'),
   getSales: (period) => api.get('/analytics/sales', { params: { period } }),
   getCategories: () => api.get('/analytics/categories'),
+  getProducts: (period) => api.get('/analytics/products', { params: { period } }),
 }
 
 // ── Customers ─────────────────────────────────────────

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import HeroSection from '../components/HeroSection'
 import WhyChooseUs from '../components/WhyChooseUs'
 import HowItWorks from '../components/HowItWorks'
@@ -41,6 +41,19 @@ export default function HomePage() {
     : FALLBACK_CATEGORIES
 
   const [activeCategory, setActiveCategory] = useState('all')
+
+  // Navbar "Shop" / "Categories" and the mobile Shop tab navigate to /#products
+  // or /#categories. Scroll to that section whenever the hash changes, and on
+  // first render when arriving from another page. The small delay lets the
+  // page paint first; the sections carry scroll-mt-28 so they land just below
+  // the sticky header instead of underneath it.
+  const location = useLocation()
+  useEffect(() => {
+    const id = location.hash.replace('#', '')
+    if (!id) return
+    const t = setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+    return () => clearTimeout(t)
+  }, [location.hash])
 
   // Sync active category from URL param (e.g. Footer links use ?category=vegetables)
   useEffect(() => {
@@ -107,7 +120,9 @@ export default function HomePage() {
   function selectCategory(id) {
     setActiveCategory(id)
     setSearchQuery('')
-    document.getElementById('products')?.scrollIntoView({ behavior: 'instant', block: 'start' })
+    // Smooth, and #products has scroll-mt-28, so the highlighted pill row is
+    // the first thing visible under the header rather than hidden behind it.
+    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function clearFilters() {
@@ -122,7 +137,7 @@ export default function HomePage() {
       <FreeDeliveryBar />
 
       {/* ── Category grid ── */}
-      <section id="categories" className="py-10 bg-sage-50">
+      <section id="categories" className="py-10 bg-sage-50 scroll-mt-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-7 reveal">
             <span className="section-subtitle">Browse</span>
@@ -159,7 +174,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Products section ── */}
-      <section id="products" className="py-8 bg-sage-50">
+      <section id="products" className="py-8 bg-sage-50 scroll-mt-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
           {/* Category pills — always visible above products for easy switching */}

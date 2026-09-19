@@ -375,8 +375,14 @@ export async function createWalkInOrder(req, res) {
         [item.id, -qty]
       ).catch(() => {})
 
+      // Keep the pack the POS actually billed ("5.5kg", "250g"). finalPrice is
+      // the price of THAT pack, so saving the product's base unit ("kg") here
+      // made a 5.5 kg sale read as "1 kg" on the order, the bill reprint and
+      // in reports. Falls back to the base unit when the POS sends none.
+      const packUnit = String(item.unit ?? '').trim().slice(0, 40) || prod.unit
+
       subtotal += finalPrice * qty
-      validatedItems.push({ id: item.id, name: prod.name, quantity: qty, price: finalPrice, unit: prod.unit })
+      validatedItems.push({ id: item.id, name: prod.name, quantity: qty, price: finalPrice, unit: packUnit })
     }
 
     if (validatedItems.length === 0) {
@@ -686,6 +692,29 @@ export async function softDeleteOrder(req, res) {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Order not found or already deleted' })
     res.json(rows[0])
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
+}
+
+// Permanent delete — removes the row for good. Only allowed on an order that
+// was ALREADY soft-deleted, so it always takes two deliberate steps and a live
+// order can never be wiped in one click. Soft delete never touched stock, so
+// there is nothing to restore here. subscription_deliveries.order_id is
+// ON DELETE SET NULL, so no other table blocks or is broken by this.
+export async function hardDeleteOrder(req, res) {
+  try {
+    const { id } = req.params
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid order id' })
+    }
+    const { rows } = await query(
+      `DELETE FROM orders WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id, reference_id`,
+      [id]
+    )
+    if (rows[0]) return res.json({ deleted: true, id: rows[0].id, reference_id: rows[0].reference_id })
+
+    const { rows: exists } = await query('SELECT 1 FROM orders WHERE id = $1', [id])
+    if (exists[0]) return res.status(409).json({ error: 'Delete the order first. Only orders already marked as deleted can be removed permanently.' })
+    return res.status(404).json({ error: 'Order not found' })
   } catch (err) { console.error(err); res.status(500).json({ error: 'Something went wrong' }) }
 }
 

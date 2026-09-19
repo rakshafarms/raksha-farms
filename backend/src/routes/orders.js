@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
-import { getOrders, getOrder, createOrder, createWalkInOrder, updateOrderStatus, softDeleteOrder, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
+import { getOrders, getOrder, createOrder, createWalkInOrder, updateOrderStatus, softDeleteOrder, hardDeleteOrder, getOrderStats, trackOrder, trackOrderByRef, getOrdersByPhone, getMyOrders, addOrderEventClient } from '../controllers/ordersController.js'
 import { adminSecret, verifyToken } from '../middleware/auth.js'
 
 // Optional auth middleware — attaches user if token valid, silently ignores bad/expired tokens
@@ -38,4 +38,5 @@ r.get('/track-ref/:ref', trackOrderByRef)             // Poll by RF-... referenc
 r.get('/:id', adminSecret, getOrder)
 r.patch('/:id/status', adminSecret, updateOrderStatus)
 r.delete('/:id', adminSecret, softDeleteOrder)   // Soft-delete: keep the row, exclude from totals
+r.delete('/:id/permanent', adminSecret, hardDeleteOrder)   // Hard-delete: only for orders already soft-deleted
 export default r

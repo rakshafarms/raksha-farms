@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { ordersAPI } from '../../lib/api'
+import { formatQty } from '../../lib/formatQty'
 import {
   Search, RefreshCw, Download, X, AlertTriangle,
   CheckCircle, ChevronDown, ChevronUp, Phone, MapPin,
@@ -91,7 +92,7 @@ function printOrderBill(o) {
     <div style="margin:7px 0">
       <div class="item-name">${i.name}</div>
       <div class="row item-detail">
-        <span>${i.quantity} × ${i.unit || 'unit'} @ ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
+        <span>${formatQty(i.quantity, i.unit)} @ ₹${Number(i.price || 0).toLocaleString('en-IN')}</span>
         <span>₹${(Number(i.price||0)*Number(i.quantity||1)).toLocaleString('en-IN')}</span>
       </div>
     </div>`).join('')
@@ -210,7 +211,7 @@ function RejectModal({ order, onClose, onConfirm }) {
                   <input type="checkbox" checked={checkedIds.has(i)} onChange={() => toggle(i)} className="w-4 h-4 accent-red-500 flex-shrink-0"/>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{item.emoji} {item.name}</p>
-                    <p className="text-xs text-gray-400">× {item.quantity} {item.unit} · {fmt(item.price * item.quantity)}</p>
+                    <p className="text-xs text-gray-400">× {formatQty(item.quantity, item.unit)} · {fmt(item.price * item.quantity)}</p>
                   </div>
                   {checkedIds.has(i) && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold flex-shrink-0">Reject</span>}
                 </label>
@@ -300,8 +301,55 @@ function DeleteModal({ order, onClose, onConfirm }) {
   )
 }
 
+// ── Permanent Delete Modal ────────────────────────────────────────────────────
+// Second step, only offered on orders already marked as deleted.
+function PurgeModal({ order, onClose, onConfirm }) {
+  const [submitting, setSubmitting] = useState(false)
+  const addr = parseAddr(order)
+  const name = addr.name || order.customer_name || 'Guest'
+
+  async function submit() {
+    setSubmitting(true)
+    await onConfirm()
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Delete Permanently</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono font-bold">#{order.reference_id || (order.created_at ? fmtOrderId(order.created_at) : order.id?.slice(0,8))}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X size={16}/></button>
+        </div>
+
+        <div className="px-6 py-4 space-y-3">
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5"/>
+            <span>This erases the order completely. It will disappear from this list and <strong>cannot be recovered</strong>.</span>
+          </div>
+          <p className="text-sm text-gray-600">
+            <span className="font-semibold text-gray-900">{name}</span> · {fmt(order.total)}
+            {order.delete_remarks ? <span className="block text-xs text-gray-400 mt-1 italic">Deleted earlier: {order.delete_remarks}</span> : null}
+          </p>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-5">
+          <button onClick={onClose} autoFocus className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 text-sm transition-colors">Cancel</button>
+          <button onClick={submit} disabled={submitting}
+            className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded-xl text-sm transition-colors">
+            {submitting ? 'Deleting…' : 'Delete Permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Order Row (expanded card) ──────────────────────────────────────────────────
-function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, onDelete, selected, onSelect }) {
+function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, onDelete, onPurge, selected, onSelect }) {
   const isOpen   = expanded === o.id
   const addr     = parseAddr(o)
   const notes    = parseNotes(o)
@@ -437,6 +485,13 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, onDelete, s
             {o.delete_remarks ? <span className="italic text-red-600"> — {o.delete_remarks}</span> : ''}
             <span className="text-red-400"> · excluded from totals</span>
           </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onPurge(o) }}
+            title="Remove this order for good"
+            className="ml-auto flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-red-200 text-red-600 font-semibold hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
+          >
+            <Trash2 size={11}/> Delete permanently
+          </button>
         </div>
       )}
 
@@ -474,7 +529,7 @@ function OrderRow({ o, expanded, onToggle, onChangeStatus, onReject, onDelete, s
                       <span className={`flex items-center gap-2 ${rej ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                         <span>{item.emoji}</span>
                         <span>{item.name}</span>
-                        <span className="text-gray-400 text-xs">× {item.quantity} {item.unit}</span>
+                        <span className="text-gray-400 text-xs">× {formatQty(item.quantity, item.unit)}</span>
                         {rej && <span className="no-underline not-italic text-[10px] bg-red-200 text-red-700 px-1.5 py-0.5 rounded-full font-bold ml-1">Rejected</span>}
                       </span>
                       <span className={`font-semibold flex-shrink-0 ml-2 ${rej ? 'line-through text-gray-400' : 'text-gray-900'}`}>
@@ -601,6 +656,7 @@ export default function OrdersPage() {
   const [expanded, setExpanded]     = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [purgeTarget,  setPurgeTarget]  = useState(null)   // permanent delete (already soft-deleted orders)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [downloading, setDownloading] = useState(false)
   const [toast, setToast]           = useState(null)
@@ -747,6 +803,22 @@ export default function OrdersPage() {
     }
   }
 
+  // Second step: erase an already-deleted order for good.
+  async function handlePurgeConfirm() {
+    const id = purgeTarget?.id
+    if (!id) return
+    try {
+      await ordersAPI.hardDelete(id)
+      setOrders(prev => prev.filter(o => o.id !== id))
+      setSelectedIds(prev => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next })
+      if (expanded === id) setExpanded(null)
+      setPurgeTarget(null)
+      showToast('Order permanently deleted')
+    } catch(e) {
+      showToast(e.response?.data?.error || 'Permanent delete failed', 'error')
+    }
+  }
+
   async function downloadCSV() {
     setDownloading(true)
     try {
@@ -817,7 +889,7 @@ export default function OrdersPage() {
     const html = selectedOrders.map(o => {
       const a = parseAddr(o)
       const items = (Array.isArray(o.items) ? o.items : []).map(item =>
-        `<li><strong>${item.name}</strong> x ${item.quantity} ${item.unit || ''}</li>`
+        `<li><strong>${item.name}</strong> x ${formatQty(item.quantity, item.unit)}</li>`
       ).join('')
       return `
         <section class="slip">
@@ -899,6 +971,14 @@ export default function OrdersPage() {
           order={deleteTarget}
           onClose={() => setDeleteTarget(null)}
           onConfirm={handleDeleteConfirm}
+        />
+      )}
+
+      {purgeTarget && (
+        <PurgeModal
+          order={purgeTarget}
+          onClose={() => setPurgeTarget(null)}
+          onConfirm={handlePurgeConfirm}
         />
       )}
 
@@ -1101,6 +1181,7 @@ export default function OrdersPage() {
                     onChangeStatus={changeStatus}
                     onReject={setRejectOrder}
                     onDelete={setDeleteTarget}
+                    onPurge={setPurgeTarget}
                     selected={selectedIds.has(o.id)}
                     onSelect={toggleOrderSelection}
                   />
