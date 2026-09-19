@@ -8,7 +8,7 @@ export default function BottomNav() {
   const { totalItems, openDrawer } = useCart()
   const { wishlist } = useWishlist()
   const { isLoggedIn } = useAuth()
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
   const navigate = useNavigate()
   const [cartBump, setCartBump] = useState(false)
 
@@ -22,12 +22,15 @@ export default function BottomNav() {
     }
   }
 
+  // Shop tab → the products section (category pills + product grid). The
+  // category card grid is hidden on mobile, so #categories showed only a
+  // heading here. Navigating to the hash lets HomePage do the scrolling; if
+  // the hash is already set, navigate() is a no-op, so scroll directly.
   function goShop() {
-    if (pathname === '/') {
-      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' })
+    if (pathname === '/' && hash === '#products') {
+      document.getElementById('products')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } else {
-      navigate('/')
-      setTimeout(() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' }), 200)
+      navigate('/#products')
     }
   }
 

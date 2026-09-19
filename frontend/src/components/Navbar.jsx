@@ -72,6 +72,22 @@ export default function Navbar() {
     }
   }
 
+  // "Shop" → #products, "Categories" → #categories. Navigating to the hash lets
+  // HomePage scroll to the section (also when coming from another page) and
+  // drives the active underline. If the hash is already set, navigate() is a
+  // no-op, so scroll directly.
+  function goToSection(id) {
+    const hash = `#${id}`
+    if (location.pathname === '/' && location.hash === hash) {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      navigate(`/${hash}`)
+    }
+  }
+  const onHome = location.pathname === '/'
+  const navBtnClass = (active) =>
+    `text-sm font-semibold transition-colors duration-200 ${active ? 'text-forest-500 border-b-2 border-forest-500 pb-0.5' : 'text-gray-600 hover:text-forest-500'}`
+
   const marqueeItems = [...announcements, ...announcements]
 
   return (
@@ -109,18 +125,10 @@ export default function Navbar() {
 
               {/* Desktop nav links */}
               <div className="hidden md:flex items-center gap-6">
-                <NavLink to="/" active={location.pathname === '/' && location.hash !== '#categories'}>Shop</NavLink>
-                <button
-                  onClick={() => {
-                    if (location.pathname !== '/') {
-                      navigate('/')
-                      setTimeout(() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
-                    } else {
-                      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }
-                  }}
-                  className={`text-sm font-semibold transition-colors duration-200 ${location.hash === '#categories' ? 'text-forest-600' : 'text-gray-600 hover:text-forest-500'}`}
-                >Categories</button>
+                <button onClick={() => goToSection('products')}
+                  className={navBtnClass(onHome && location.hash !== '#categories')}>Shop</button>
+                <button onClick={() => goToSection('categories')}
+                  className={navBtnClass(onHome && location.hash === '#categories')}>Categories</button>
                 <NavLink to="/wishlist" active={location.pathname === '/wishlist'}>
                   Wishlist
                   {wishlist.length > 0 && (

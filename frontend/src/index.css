@@ -11,6 +11,9 @@
     /* Nothing may push the page wider than the screen — kills the
        sideways scroll that made every page need panning to read */
     overflow-x: hidden;
+    /* Prevent overscroll bounce on iOS. This must live on <html>, not <body>:
+       on <body> it blocked wheel scrolling from chaining up to the page. */
+    overscroll-behavior-y: none;
   }
   body {
     font-family: 'Poppins', sans-serif;
@@ -18,9 +21,14 @@
     color: #1a1a1a;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent overscroll bounce on iOS */
-    overscroll-behavior-y: none;
+    /* Clip sideways overflow WITHOUT turning <body> into its own scroll
+       container. With overflow-x:hidden here and on <html>, <body> became a
+       separate scroller that had nothing to scroll, and because it also
+       carried overscroll-behavior:none the mouse wheel was swallowed: the
+       page looked frozen (cursor moved, nothing scrolled). `clip` avoids
+       that; `hidden` stays as a fallback for browsers that predate `clip`. */
     overflow-x: hidden;
+    overflow-x: clip;
     width: 100%;
     max-width: 100vw;
   }

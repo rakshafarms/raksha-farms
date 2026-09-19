@@ -65,8 +65,12 @@ export function CartProvider({ children }) {
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
-    document.body.style.overflow = drawerOpen ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
+    // Lock <html> as well as <body>: <html> carries overflow-x:hidden, so the
+    // viewport takes its overflow from <html> and a body-only lock does nothing.
+    const value = drawerOpen ? 'hidden' : ''
+    document.documentElement.style.overflow = value
+    document.body.style.overflow = value
+    return () => { document.documentElement.style.overflow = ''; document.body.style.overflow = '' }
   }, [drawerOpen])
 
   // Normalise any cart item whose displayed `unit` got out of sync with its

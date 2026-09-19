@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { analyticsAPI } from '../../lib/api'
+import ItemSalesTable from '../../components/ItemSalesTable'
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -227,6 +228,9 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Per-item sales grouped by category */}
+      <ItemSalesTable />
 
       {/* Status count table */}
       {statusRows.length > 0 && (

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import { productsAPI, ordersAPI, customersAPI, API_BASE_URL } from '../../lib/api'
+import { formatQty } from '../../lib/formatQty'
 import {
   Search, Plus, Minus, Trash2, Printer, ShoppingBag,
   User, Phone, IndianRupee, Tag, CheckCircle2, X,
@@ -242,7 +243,7 @@ export default function BillingPage() {
       <div style="margin:7px 0">
         <div class="item-name">${i.name}</div>
         <div class="row item-detail">
-          <span>${i.qty} × ${i.unit || 'unit'} @ ${fmtRs(i.price)}</span>
+          <span>${formatQty(i.qty, i.unit)} @ ${fmtRs(i.price)}</span>
           <span>${fmtRs(i.price * i.qty)}</span>
         </div>
       </div>`).join('')}
@@ -311,7 +312,7 @@ export default function BillingPage() {
             <div className="px-6 pb-2 max-h-40 overflow-y-auto">
               {receipt.snap?.map(i => (
                 <div key={i.id} className="flex justify-between text-xs text-gray-500 py-1 border-b last:border-0">
-                  <span>{i.name} × {i.qty}</span>
+                  <span>{i.name} × {formatQty(i.qty, i.unit)}</span>
                   <span>{fmtRs(i.price * i.qty)}</span>
                 </div>
               ))}
@@ -685,20 +686,34 @@ function normalizeDefaultUnit(unit) {
 // Parse a unit string into a normalized measure so the chosen size can be
 // scaled against the product's actual base unit. Weight → grams, volume → mL.
 // Handles bare units ("kg", "litre") and quantified units ("250g", "1kg",
-// "500mL", "2L"). Returns null for non-scalable units (pcs, dozen, bunch…).
+// "500mL", "2L"), plus countable units ("Piece", "2pcs", "dozen", "3 bunch").
+// Returns null for anything it does not recognise.
 function parseMeasure(str) {
   // Strip any parenthetical note e.g. "1kg (4-6 pcs)" → "1kg"
   const s = String(str || '').split('(')[0].trim().toLowerCase()
   if (!s) return null
-  const m = s.match(/^(\d*\.?\d*)\s*(kg|kgs|kilogram|kilograms|g|gm|gms|gram|grams|ml|millilitre|millilitres|milliliter|milliliters|l|lt|ltr|litre|litres|liter|liters)$/i)
+  const m = s.match(/^(\d*\.?\d*)\s*([a-z]+)$/i)
   if (!m) return null
   const qty = m[1] === '' ? 1 : parseFloat(m[1])
   if (isNaN(qty) || qty <= 0) return null
   const unit = m[2]
   const WEIGHT = { kg:1000, kgs:1000, kilogram:1000, kilograms:1000, g:1, gm:1, gms:1, gram:1, grams:1 }
-  const VOLUME = { ml:1, millilitre:1, millilitres:1, milliliter:1, milliliters:1, l:1000, lt:1000, ltr:1000, litre:1000, litres:1000, liter:1000, liters:1000 }
+  const VOLUME = { ml:1, millilitre:1, millilitres:1, milliliter:1, milliliters:1, l:1000, lt:1000, ltr:1000, lit:1000, litre:1000, litres:1000, liter:1000, liters:1000 }
+  // Countable units. Each noun is its own kind, so they only scale against a
+  // product priced in that SAME noun: a per-Piece item + "2Piece" → ×2, a
+  // per-dozen item + "6pcs" → ×0.5. A per-kg item + "2pcs" is still not
+  // comparable, so its price is left for the admin to type.
+  // Keep in sync with backend/src/utils/measure.js (sales report).
+  const COUNT = {
+    pc:['piece',1], pcs:['piece',1], piece:['piece',1], pieces:['piece',1], nos:['piece',1], no:['piece',1],
+    dozen:['piece',12], dozens:['piece',12], dz:['piece',12],
+    bunch:['bunch',1], bunches:['bunch',1],
+    packet:['packet',1], packets:['packet',1], pack:['packet',1], packs:['packet',1], pkt:['packet',1],
+    box:['box',1], boxes:['box',1], bottle:['bottle',1], bottles:['bottle',1], tray:['tray',1], trays:['tray',1],
+  }
   if (unit in WEIGHT) return { kind: 'weight', amount: qty * WEIGHT[unit] }
   if (unit in VOLUME) return { kind: 'volume', amount: qty * VOLUME[unit] }
+  if (unit in COUNT)  return { kind: `count:${COUNT[unit][0]}`, amount: qty * COUNT[unit][1] }
   return null
 }
 
