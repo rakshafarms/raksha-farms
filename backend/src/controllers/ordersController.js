@@ -1,5 +1,6 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
+import { stockDelta } from '../utils/measure.js'
 
 const VALID_STATUSES = ['placed','accepted','preparing','out_for_delivery','delivered','cancelled','rejected']
 const orderEventClients = new Set()
@@ -127,11 +128,13 @@ export async function createOrder(req, res) {
       }
 
       // ── Atomic stock deduct — use prod.id (real DB UUID), not item.id (may be stale)
+      // Deduct in the product's base unit: 2 × "500g" of a per-kg item is 1.0.
+      const deduct = stockDelta(prod.unit, serverUnit, qty)
       const { rowCount } = await client.query(
         `UPDATE products
-         SET stock = stock - $1, updated_at = NOW()
+         SET stock = ROUND((stock - $1)::numeric, 3), updated_at = NOW()
          WHERE id = $2 AND stock >= $1`,
-        [qty, prodId]
+        [deduct, prodId]
       )
       if (rowCount === 0) {
         await client.query('ROLLBACK')
@@ -140,7 +143,7 @@ export async function createOrder(req, res) {
 
       await client.query(
         `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'order_placed')`,
-        [prodId, -qty]
+        [prodId, -deduct]
       ).catch(() => {})
 
       serverSubtotal += serverPrice * qty
@@ -361,25 +364,28 @@ export async function createWalkInOrder(req, res) {
         ? Number(prod.offer_price) : Number(prod.price)
       const finalPrice = adminPrice ?? catalogPrice
 
-      const { rowCount } = await client.query(
-        `UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2 AND stock >= $1`,
-        [qty, item.id]
-      )
-      if (rowCount === 0) {
-        await client.query('ROLLBACK')
-        return res.status(400).json({ error: `Insufficient stock for "${prod.name}" (available: ${prod.stock})` })
-      }
-
-      await client.query(
-        `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'walkin_sale')`,
-        [item.id, -qty]
-      ).catch(() => {})
-
       // Keep the pack the POS actually billed ("5.5kg", "250g"). finalPrice is
       // the price of THAT pack, so saving the product's base unit ("kg") here
       // made a 5.5 kg sale read as "1 kg" on the order, the bill reprint and
       // in reports. Falls back to the base unit when the POS sends none.
       const packUnit = String(item.unit ?? '').trim().slice(0, 40) || prod.unit
+
+      // Deduct in the product's base unit: 1 × "500g" of a per-kg item is 0.5,
+      // so stock 43 becomes 42.5 rather than 42.
+      const deduct = stockDelta(prod.unit, packUnit, qty)
+      const { rowCount } = await client.query(
+        `UPDATE products SET stock = ROUND((stock - $1)::numeric, 3), updated_at = NOW() WHERE id = $2 AND stock >= $1`,
+        [deduct, item.id]
+      )
+      if (rowCount === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Insufficient stock for "${prod.name}" (available: ${prod.stock} ${prod.unit || ''}, this bill needs ${deduct})` })
+      }
+
+      await client.query(
+        `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'walkin_sale')`,
+        [item.id, -deduct]
+      ).catch(() => {})
 
       subtotal += finalPrice * qty
       validatedItems.push({ id: item.id, name: prod.name, quantity: qty, price: finalPrice, unit: packUnit })
@@ -544,6 +550,27 @@ async function safeQuery(client, sql, params) {
   }
 }
 
+// Put an order line's stock back, in the product's base unit — the mirror of
+// the deduction made when the order was placed (1 × "500g" of a per-kg item
+// restores 0.5). Non-fatal: a missing product never aborts the status change.
+async function restoreStock(client, item, reason) {
+  let baseUnit = null
+  try {
+    const { rows } = await client.query('SELECT unit FROM products WHERE id = $1', [item.id])
+    if (!rows[0]) return
+    baseUnit = rows[0].unit
+  } catch { return }
+  const back = stockDelta(baseUnit, item.unit, item.quantity || 1)
+  await safeQuery(client,
+    `UPDATE products SET stock = ROUND((stock + $1)::numeric, 3), updated_at = NOW() WHERE id = $2`,
+    [back, item.id]
+  )
+  await safeQuery(client,
+    `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,$3)`,
+    [item.id, back, reason]
+  )
+}
+
 export async function updateOrderStatus(req, res) {
   const client = await pool.connect()
   try {
@@ -612,14 +639,7 @@ export async function updateOrderStatus(req, res) {
       // Restore stock — use SAVEPOINT so a bad product id never aborts the tx
       for (const item of enriched) {
         if (!item.id || prevRejectedIds.has(item.id)) continue
-        await safeQuery(client,
-          `UPDATE products SET stock = stock + $1, updated_at = NOW() WHERE id = $2`,
-          [item.quantity || 1, item.id]
-        )
-        await safeQuery(client,
-          `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'rejection_restore')`,
-          [item.id, item.quantity || 1]
-        )
+        await restoreStock(client, item, 'rejection_restore')
       }
     }
 
@@ -653,14 +673,7 @@ export async function updateOrderStatus(req, res) {
     ) {
       for (const item of fullItems) {
         if (!item.id || prevRejectedIds.has(item.id)) continue
-        await safeQuery(client,
-          `UPDATE products SET stock = stock + $1, updated_at = NOW() WHERE id = $2`,
-          [item.quantity || 1, item.id]
-        )
-        await safeQuery(client,
-          `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'cancellation_restore')`,
-          [item.id, item.quantity || 1]
-        )
+        await restoreStock(client, item, 'cancellation_restore')
       }
     }
 

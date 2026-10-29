@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
 import BulkImportModal from '../../components/BulkImportModal'
 import { productsAPI, categoriesAPI } from '../../lib/api'
+import { fmtStock } from '../../lib/formatQty'
 import { AlertTriangle, Package, Search, Printer, Download, FileSpreadsheet } from 'lucide-react'
 
 const FALLBACK_CATEGORIES = [
@@ -42,8 +43,11 @@ export default function InventoryPage() {
 
   useEffect(() => { fetchAll() }, [])
 
+  // Stock level bucket. Stock can be fractional (42.5 kg), so never compare with === 0.
+  const levelOf = (s) => { const n = Number(s); return n <= 0 ? 'out' : n <= 5 ? 'critical' : n <= 15 ? 'low' : 'good' }
+
   async function saveStock(id) {
-    const qty = parseInt(newStock, 10)
+    const qty = Math.round(parseFloat(newStock) * 1000) / 1000   // fractions allowed, e.g. 42.5
     if (isNaN(qty) || qty < 0) { setStockError('Please enter a valid stock quantity'); return }
     setStockError('')
     try {
@@ -65,11 +69,11 @@ export default function InventoryPage() {
     const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
     const levelColor = { out: '#dc2626', critical: '#ea580c', low: '#ca8a04', good: '#16a34a' }
     const rows = filtered.map(p => {
-      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+      const level = levelOf(p.stock)
       return `<tr>
         <td>${p.name}</td>
         <td style="text-transform:capitalize">${p.category || '—'}</td>
-        <td style="text-align:right;font-weight:700">${p.stock}</td>
+        <td style="text-align:right;font-weight:700">${fmtStock(p.stock)}</td>
         <td><span style="color:${levelColor[level]};font-weight:600">${levelLabel[level]}</span></td>
       </tr>`
     }).join('')
@@ -145,12 +149,12 @@ export default function InventoryPage() {
     const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
     const headers = ['Product', 'Category', 'Unit', 'Stock', 'Level', 'Price', 'Offer Price']
     const rows = filtered.map(p => {
-      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+      const level = levelOf(p.stock)
       return [
         p.name,
         p.category || '',
         p.unit || '',
-        p.stock,
+        fmtStock(p.stock),
         levelLabel[level],
         p.price || '',
         p.offer_price || '',
@@ -170,8 +174,8 @@ export default function InventoryPage() {
     const levelLabel = { out: 'Out of Stock', critical: 'Critical', low: 'Low', good: 'Good' }
     const headers = ['Product', 'Category', 'Unit', 'Stock', 'Level', 'Price', 'Offer Price']
     const body = filtered.map(p => {
-      const level = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
-      return [p.name, p.category || '', p.unit || '', p.stock, levelLabel[level], p.price || '', p.offer_price || '']
+      const level = levelOf(p.stock)
+      return [p.name, p.category || '', p.unit || '', fmtStock(p.stock), levelLabel[level], p.price || '', p.offer_price || '']
         .map(v => `<td>${String(v).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</td>`)
         .join('')
     }).map(r => `<tr>${r}</tr>`).join('')
@@ -186,10 +190,10 @@ export default function InventoryPage() {
   }
 
   // Stats
-  const outOfStock  = products.filter(p => p.stock === 0).length
-  const critical    = products.filter(p => p.stock > 0 && p.stock <= 5).length
-  const lowStockCnt = products.filter(p => p.stock > 5 && p.stock <= 15).length
-  const good        = products.filter(p => p.stock > 15).length
+  const outOfStock  = products.filter(p => levelOf(p.stock) === 'out').length
+  const critical    = products.filter(p => levelOf(p.stock) === 'critical').length
+  const lowStockCnt = products.filter(p => levelOf(p.stock) === 'low').length
+  const good        = products.filter(p => levelOf(p.stock) === 'good').length
 
   if (loadError) return (
     <AdminLayout title="Inventory">
@@ -230,7 +234,7 @@ export default function InventoryPage() {
           <div className="flex flex-wrap gap-2">
             {lowStock.map(p => (
               <span key={p.id} className="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-medium">
-                {p.name} — {p.stock} left
+                {p.name} — {fmtStock(p.stock)} {p.unit || ''} left
               </span>
             ))}
           </div>
@@ -327,7 +331,7 @@ export default function InventoryPage() {
               <tr><td colSpan={5} className="py-12 text-center text-gray-400">No products found</td></tr>
             )}
             {filtered.map(p => {
-              const level  = p.stock === 0 ? 'out' : p.stock <= 5 ? 'critical' : p.stock <= 15 ? 'low' : 'good'
+              const level  = levelOf(p.stock)
               const colors = {
                 out:      'bg-red-100 text-red-700',
                 critical: 'bg-orange-100 text-orange-700',
@@ -339,7 +343,7 @@ export default function InventoryPage() {
                 <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-5 py-3 font-medium text-gray-900">{p.name}</td>
                   <td className="px-5 py-3 capitalize text-gray-500">{p.category}</td>
-                  <td className="px-5 py-3 text-right font-bold text-gray-900">{p.stock}</td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-900">{fmtStock(p.stock)}<span className="ml-1 text-xs font-normal text-gray-400">{p.unit || ''}</span></td>
                   <td className="px-5 py-3">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${colors[level]}`}>
                       {labels[level]}
@@ -350,7 +354,7 @@ export default function InventoryPage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <input
-                            type="number" min="0" value={newStock}
+                            type="number" min="0" step="any" value={newStock}
                             onChange={e => { setNewStock(e.target.value); setStockError('') }}
                             className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4332]"
                             placeholder="Qty"

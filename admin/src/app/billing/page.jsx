@@ -111,13 +111,20 @@ export default function BillingPage() {
       : (p.offer_price && Number(p.offer_price) > 0 ? Number(p.offer_price) : Number(p.price))
     const unit  = variant ? variant.label : (p.unit || '')
     const cartKey = variant ? `${p.id}|${variant.label}` : p.id
+    // Stock is kept in the product's base unit (kg); the cart counts PACKS.
+    // 42.5 kg in stock allows 85 packs of "500g" but only 42 of "kg". Packs
+    // that can't be compared with the base unit count as one each (as before).
+    const ratio    = priceRatio(p.unit, unit) ?? 1
+    const maxPacks = Math.max(0, Math.floor(Number(p.stock) / ratio + 1e-9))
+    if (maxPacks < 1) return
     setCart(prev => {
       const ex = prev.find(i => i.cartKey === cartKey)
       if (ex) {
-        if (ex.qty >= Number(p.stock)) return prev
+        if (ex.qty >= ex.stock) return prev
         return prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + 1 } : i)
       }
-      return [...prev, { cartKey, id: p.id, name: p.name, unit, price, qty: 1, stock: Number(p.stock), image: imgSrc(p.image_url) }]
+      // `stock` on a cart line = max packs of THIS pack size, not raw stock
+      return [...prev, { cartKey, id: p.id, name: p.name, unit, price, qty: 1, stock: maxPacks, image: imgSrc(p.image_url) }]
     })
   }
 

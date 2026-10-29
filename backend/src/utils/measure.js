@@ -46,3 +46,14 @@ export function packRatio(baseUnit, packUnit) {
   if (!base || !pack || base.kind !== pack.kind || base.amount <= 0) return null
   return pack.amount / base.amount
 }
+
+export const round3 = n => Math.round(Number(n) * 1000) / 1000
+
+// Stock movement, in the product's base unit, for `packs` packs of `packUnit`.
+// A per-kg product: 1 × "500g" → 0.5, 3 × "250g" → 0.75, 2 × "kg" → 2.
+// When the pack can't be compared with the base unit (e.g. "2pcs" of a per-kg
+// item, or no unit at all) each pack counts as one, which is the old behaviour.
+export function stockDelta(baseUnit, packUnit, packs) {
+  const ratio = packRatio(baseUnit, packUnit) ?? 1
+  return round3((Number(packs) || 0) * ratio)
+}

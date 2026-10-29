@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { fmtStock } from '../lib/formatQty'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import { Bell, Menu, Package } from 'lucide-react'
@@ -386,8 +387,8 @@ export default function AdminLayout({ children, title }) {
                                   <p className="text-xs text-gray-500">{p.category || 'Uncategorized'}</p>
                                 </div>
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0
-                                  ${p.stock === 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                                  {p.stock === 0 ? 'OUT' : `${p.stock} left`}
+                                  ${Number(p.stock) <= 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                  {Number(p.stock) <= 0 ? 'OUT' : `${fmtStock(p.stock)} left`}
                                 </span>
                               </li>
                             ))}

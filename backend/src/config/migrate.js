@@ -41,7 +41,7 @@ async function migrate() {
         category    VARCHAR(50) NOT NULL,
         description TEXT,
         price       DECIMAL(10,2) NOT NULL,
-        stock       INTEGER DEFAULT 0,
+        stock       DOUBLE PRECISION DEFAULT 0,   -- fractional: 500g of a per-kg item deducts 0.5
         unit        VARCHAR(20),
         image_url   VARCHAR(500),
         variants    JSONB DEFAULT '[]',
@@ -113,7 +113,7 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS inventory_logs (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         product_id  UUID REFERENCES products(id) ON DELETE CASCADE,
-        change      INTEGER NOT NULL,
+        change      DOUBLE PRECISION NOT NULL,
         reason      VARCHAR(100),
         created_at  TIMESTAMPTZ DEFAULT NOW()
       )

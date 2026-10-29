@@ -27,7 +27,7 @@ export async function initDb() {
         description TEXT,
         price       DECIMAL(10,2) NOT NULL,
         offer_price DECIMAL(10,2) DEFAULT NULL,
-        stock       INTEGER DEFAULT 0,
+        stock       DOUBLE PRECISION DEFAULT 0,   -- fractional: 500g of a per-kg item deducts 0.5
         unit        VARCHAR(20),
         image_url   VARCHAR(500),
         variants    JSONB DEFAULT '[]',
@@ -119,7 +119,7 @@ export async function initDb() {
       CREATE TABLE IF NOT EXISTS inventory_logs (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         product_id  UUID REFERENCES products(id) ON DELETE CASCADE,
-        change      INTEGER NOT NULL,
+        change      DOUBLE PRECISION NOT NULL,
         reason      VARCHAR(100),
         created_at  TIMESTAMPTZ DEFAULT NOW()
       )
@@ -145,6 +145,17 @@ export async function initDb() {
 
     // Add offer_price to existing products table if missing
     await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS offer_price DECIMAL(10,2) DEFAULT NULL`)
+
+    // Stock must hold fractions: billing 500g of a per-kg product deducts 0.5,
+    // not 1. INTEGER → DOUBLE PRECISION is lossless for existing whole values
+    // and is a no-op once applied. (DOUBLE, not NUMERIC: pg returns NUMERIC as
+    // strings, which would break every `stock === 0` check in the admin UI.)
+    for (const sql of [
+      `ALTER TABLE products ALTER COLUMN stock TYPE DOUBLE PRECISION`,
+      `ALTER TABLE inventory_logs ALTER COLUMN change TYPE DOUBLE PRECISION`,
+    ]) {
+      await query(sql).catch(e => console.error(`⚠ schema upgrade failed (${sql}):`, e.message))
+    }
 
     // Categories table — admin-managed, drives the frontend category grid
     await query(`

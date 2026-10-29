@@ -1,5 +1,6 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
+import { stockDelta } from '../utils/measure.js'
 
 // Map subscription `frequency` string column → integer days when there is no
 // linked plan (sp.frequency_days NULL). Without this, markDelivered/skipDelivery
@@ -223,27 +224,29 @@ export async function generateOrders(req, res) {
       //    return them to the admin so they can restock and retry.
       const stockFailures = []
       const validatedItems = []
+      const deducted = new Map()   // product id → stock taken (base units), for rollback below
 
       for (const item of items) {
         if (!item.id) { validatedItems.push(item); continue }
 
         // Lock the product row so concurrent order placement can't race us
         const { rows: pRows } = await client.query(
-          'SELECT id, name, stock FROM products WHERE id=$1 FOR UPDATE',
+          'SELECT id, name, stock, unit FROM products WHERE id=$1 FOR UPDATE',
           [item.id]
         )
         const prod = pRows[0]
         if (!prod) { validatedItems.push(item); continue }  // product removed — skip gracefully
 
-        const qty = Number(item.quantity) || 1
-        if (prod.stock < qty) {
+        // Stock moves in the product's base unit: 2 × "500g" of a per-kg item is 1.0
+        const qty = stockDelta(prod.unit, item.unit, Number(item.quantity) || 1)
+        if (Number(prod.stock) < qty) {
           stockFailures.push({ name: prod.name, need: qty, have: prod.stock })
           continue  // do NOT push to validatedItems — we will skip this subscription
         }
 
         // Atomic deduct — rowCount 0 means a concurrent request just took the last stock
         const { rowCount } = await client.query(
-          `UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2 AND stock >= $1`,
+          `UPDATE products SET stock = ROUND((stock - $1)::numeric, 3), updated_at = NOW() WHERE id = $2 AND stock >= $1`,
           [qty, item.id]
         )
         if (rowCount === 0) {
@@ -256,23 +259,22 @@ export async function generateOrders(req, res) {
           [item.id, -qty]
         ).catch(() => {})
 
+        deducted.set(item.id, (deducted.get(item.id) || 0) + qty)
         validatedItems.push(item)
       }
 
       // If any item couldn't be stocked, skip this subscription entirely.
       // Roll back the stock deductions we just made for this sub's items.
       if (stockFailures.length > 0) {
-        // Restore stock that was deducted for the items we did process before hitting the failure
-        for (const item of validatedItems) {
-          if (!item.id) continue
-          const qty = Number(item.quantity) || 1
+        // Restore exactly what was deducted for the items processed before the failure
+        for (const [productId, qty] of deducted) {
           await client.query(
-            `UPDATE products SET stock = stock + $1, updated_at = NOW() WHERE id = $2`,
-            [qty, item.id]
+            `UPDATE products SET stock = ROUND((stock + $1)::numeric, 3), updated_at = NOW() WHERE id = $2`,
+            [qty, productId]
           ).catch(() => {})
           await client.query(
             `INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,'subscription_stock_restore')`,
-            [item.id, qty]
+            [productId, qty]
           ).catch(() => {})
         }
         failed.push({

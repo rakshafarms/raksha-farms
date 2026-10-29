@@ -7,6 +7,12 @@
 //
 // Showing "1 kg" for a 5.5 kg POS sale was the bug this guards against: the
 // count of packs is not the weight when the pack label has its own amount.
+// Stock can be fractional (42.5 kg after a 500g sale). Show up to 3 decimals,
+// no trailing zeros: 42.5 → "42.5", 43 → "43", 0.25 → "0.25".
+export function fmtStock(n) {
+  return Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })
+}
+
 export function formatQty(quantity, unit) {
   const q = Number(quantity) || 1
   const u = String(unit || '').trim()

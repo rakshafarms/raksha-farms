@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useRef, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout'
+import { fmtStock } from '../../lib/formatQty'
 import BulkImportModal from '../../components/BulkImportModal'
 import { productsAPI, categoriesAPI } from '../../lib/api'
 import { Plus, Pencil, Archive, Search, X, RotateCcw, Package, Trash2, ImagePlus, FileSpreadsheet } from 'lucide-react'
@@ -291,7 +292,7 @@ export default function ProductsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <span className={stockColor(p.stock)}>{p.stock}</span>
+                  <span className={stockColor(p.stock)}>{fmtStock(p.stock)}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -387,7 +388,7 @@ export default function ProductsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
-                  <input required type="number" min="0" value={form.stock}
+                  <input required type="number" min="0" step="any" value={form.stock}
                     onChange={e=>setForm(p=>({...p,stock:e.target.value}))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332]"/>
                 </div>

@@ -1,5 +1,6 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
+import { round3 } from '../utils/measure.js'
 import fs from 'fs/promises'
 import path from 'path'
 import { randomUUID } from 'crypto'
@@ -112,9 +113,9 @@ export async function createProduct(req, res) {
     const { name, category, description, price, offer_price, stock, unit, variants, is_featured, is_organic } = req.body
     if (!name || !category || price === undefined || stock === undefined)
       return res.status(400).json({ error: 'name, category, price, and stock are required' })
-    const priceNum = Number(price); const stockNum = parseInt(stock, 10)
+    const priceNum = Number(price); const stockNum = round3(parseFloat(stock))
     if (isNaN(priceNum) || priceNum < 0) return res.status(400).json({ error: 'price must be a non-negative number' })
-    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative integer' })
+    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative number' })
 
     const { image_url, newGalleryUrls } = extractImageUrls(req)
     const offerVal    = offer_price && Number(offer_price) > 0 ? Number(offer_price) : null
@@ -207,11 +208,11 @@ export async function hardDeleteProduct(req, res) {
 export async function updateStock(req, res) {
   try {
     const { stock, reason } = req.body
-    const stockNum = parseInt(stock, 10)
-    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative integer' })
+    const stockNum = round3(parseFloat(stock))   // fractional stock allowed, e.g. 42.5 kg
+    if (isNaN(stockNum) || stockNum < 0) return res.status(400).json({ error: 'stock must be a non-negative number' })
     const { rows: prod } = await query('SELECT stock, name FROM products WHERE id=$1', [req.params.id])
     if (!prod[0]) return res.status(404).json({ error: 'Product not found' })
-    const change = stockNum - prod[0].stock
+    const change = round3(stockNum - Number(prod[0].stock))
     await query('UPDATE products SET stock=$1, updated_at=NOW() WHERE id=$2', [stockNum, req.params.id])
     await query('INSERT INTO inventory_logs (product_id, change, reason) VALUES ($1,$2,$3)',
       [req.params.id, change, reason || 'Manual update']).catch(() => {})
@@ -340,7 +341,7 @@ export async function bulkImportProducts(req, res) {
         const description  = row.description != null ? String(row.description) : null
         const price        = num(row.price)
         const offer_price  = num(row.offer_price)
-        const stock        = row.stock != null && row.stock !== '' ? Math.floor(Number(row.stock)) : null
+        const stock        = row.stock != null && row.stock !== '' ? round3(Number(row.stock)) : null
         const unit         = row.unit != null ? String(row.unit).trim() : null
         const imageUrlRaw  = row.image_url != null ? String(row.image_url).trim() : ''
         const galleryRaw   = row.gallery_urls != null ? String(row.gallery_urls).trim() : ''
