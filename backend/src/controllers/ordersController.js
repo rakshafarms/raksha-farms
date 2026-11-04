@@ -1,6 +1,6 @@
 import { query } from '../config/database.js'
 import pool from '../config/database.js'
-import { stockDelta } from '../utils/measure.js'
+import { stockDelta, packRatio, parseMeasure } from '../utils/measure.js'
 
 const VALID_STATUSES = ['placed','accepted','preparing','out_for_delivery','delivered','cancelled','rejected']
 const orderEventClients = new Set()
@@ -114,17 +114,37 @@ export async function createOrder(req, res) {
       let serverUnit = prod.unit
 
       if (variants.length && item.unit) {
+        // Exact label first; otherwise the same SIZE under another spelling
+        // ("500g" from a chat bot ↔ configured "500 gms"), so the shop's own
+        // variant price wins over a computed one.
+        const want = parseMeasure(item.unit)
         const variant = variants.find(v => v.label === item.unit)
+          || (want && variants.find(v => { const m = parseMeasure(v.label); return m && m.kind === want.kind && m.amount === want.amount }))
         if (variant) {
           serverPrice = Number(variant.price)
           serverUnit  = variant.label
         }
       }
-      // Fallback: base product price (offer_price takes precedence)
       if (!serverPrice) {
-        serverPrice = prod.offer_price && Number(prod.offer_price) > 0
+        const basePrice = prod.offer_price && Number(prod.offer_price) > 0
           ? Number(prod.offer_price)
           : Number(prod.price)
+        // A pack size that is not a configured variant but IS a measurable
+        // fraction/multiple of the base unit — "500g" of a per-kg product, "2pcs"
+        // of a per-piece one — is honoured, priced server-side from the catalog
+        // price (never from the client), and stored as the pack so the order,
+        // the bill and the stock movement all say 500g. Before this, such an
+        // order silently became 1 × kg at the full per-kg price. Anything that
+        // can't be compared with the base unit falls back to the base unit.
+        const requested = String(item.unit ?? '').trim().slice(0, 40)
+        const sameAsBase = requested.toLowerCase() === String(prod.unit ?? '').trim().toLowerCase()
+        const ratio = requested && !sameAsBase ? packRatio(prod.unit, requested) : null
+        if (ratio !== null && ratio > 0) {
+          serverPrice = Math.round(basePrice * ratio * 100) / 100
+          serverUnit  = requested
+        } else {
+          serverPrice = basePrice
+        }
       }
 
       // ── Atomic stock deduct — use prod.id (real DB UUID), not item.id (may be stale)
